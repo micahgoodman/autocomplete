@@ -1,5 +1,8 @@
 export interface AutocompleteResponse {
-  completedText: string;
+  steps: Array<{
+    content: string;
+    timestamp: string;
+  }>;
   success: boolean;
   error?: string;
 }

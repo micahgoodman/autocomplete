@@ -82,6 +82,10 @@ export type ChecklistItem = {
   text: string;
   completed: boolean;
   draft?: string | null;
+  steps?: Array<{
+    content: string;
+    timestamp: string;
+  }>;
   workTypes?: {
     email?: boolean;
     coding?: boolean;

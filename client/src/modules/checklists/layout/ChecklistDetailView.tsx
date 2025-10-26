@@ -221,6 +221,18 @@ export function ChecklistDetailView({
     }
   };
 
+  const handleSetSteps = async (index: number, steps: Array<{ content: string; timestamp: string }>) => {
+    try {
+      const updatedItems = [...checklist.items];
+      updatedItems[index] = { ...updatedItems[index], steps };
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      onShowToast('Failed to save agent steps');
+    }
+  };
+
   const handleSetWorkType = async (
     index: number,
     type: 'email' | 'coding' | 'calendar',
@@ -367,6 +379,7 @@ export function ChecklistDetailView({
                   onDelete={handleDeleteItem}
                   onUpdate={handleUpdateItem}
                   onSetDraft={handleSetDraft}
+                  onSetSteps={handleSetSteps}
                   onMoveItem={handleMoveItem}
                   onSetWorkType={handleSetWorkType}
                   disabled={togglingIndex === index || addingItem}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ChecklistItem as ChecklistItemType } from '../../../api';
 
 import { AutocompleteDraft } from './AutocompleteDraft';
+import { AgentSteps } from './AgentSteps';
 import { ChecklistWorkTypeSelector } from './ChecklistWorkTypeSelector';
 
 type Props = {
@@ -11,6 +12,7 @@ type Props = {
   onDelete: (index: number) => void;
   onUpdate: (index: number, newText: string) => void;
   onSetDraft: (index: number, draft: string | null) => void;
+  onSetSteps: (index: number, steps: Array<{ content: string; timestamp: string }>) => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onSetWorkType: (index: number, type: 'email' | 'coding' | 'calendar', value: boolean) => void;
   disabled?: boolean;
@@ -28,6 +30,7 @@ export function DraggableChecklistItem({
   onDelete,
   onUpdate,
   onSetDraft,
+  onSetSteps,
   onMoveItem,
   onSetWorkType,
   disabled = false,
@@ -119,6 +122,11 @@ export function DraggableChecklistItem({
     setIsEditingDraft(false);
   };
 
+  const handleDeleteSteps = () => {
+    if (disabled) return;
+    onSetSteps(index, []);
+  };
+
   const handleRetryDraft = () => {
     handleAutocomplete();
   };
@@ -126,6 +134,20 @@ export function DraggableChecklistItem({
   const handleApproveDraft = () => {
     // eslint-disable-next-line no-console
     console.log(`[ChecklistItem] Approved draft for checklist item ${index}`);
+  };
+
+  const handleApproveSteps = () => {
+    // eslint-disable-next-line no-console
+    console.log(`[ChecklistItem] Approved agent steps for checklist item ${index}`, item.steps);
+    // Future: Could copy the last step to item.text, mark as completed, etc.
+  };
+
+  const handleUpdateStep = (stepIndex: number, content: string) => {
+    if (!item.steps) return;
+    const nextSteps = item.steps.map((s, i) =>
+      i === stepIndex ? { ...s, content, timestamp: new Date().toISOString() } : s
+    );
+    onSetSteps(index, nextSteps);
   };
 
   const handleStartDraftEdit = () => {
@@ -174,9 +196,10 @@ export function DraggableChecklistItem({
     
     try {
       const response = await window.electron.autocompleteTask(item.text);
+      console.log('[Component] Autocomplete response:', response);
       
       if (response.success) {
-        onSetDraft(index, response.completedText);
+        onSetSteps(index, response.steps || []);
       } else {
         setAutocompleteError(response.error || 'Autocomplete failed');
         setTimeout(() => setAutocompleteError(null), 5000);
@@ -454,6 +477,20 @@ export function DraggableChecklistItem({
                 whiteSpace: 'pre-wrap',
                 resize: 'vertical',
               }}
+            />
+          </div>
+        )}
+
+        {item.steps && item.steps.length > 0 && (
+          <div style={{ marginLeft: '34px' }}>
+            <AgentSteps
+              steps={item.steps}
+              onDelete={handleDeleteSteps}
+              onRetry={handleRetryDraft}
+              onApprove={handleApproveSteps}
+              onUpdateStep={handleUpdateStep}
+              disabled={disabled}
+              isProcessing={isAutocompleting}
             />
           </div>
         )}
