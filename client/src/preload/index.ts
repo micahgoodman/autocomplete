@@ -15,6 +15,12 @@ contextBridge.exposeInMainWorld('electron', {
   autocompleteTask: (taskText: string): Promise<AutocompleteResponse> => {
     console.log('[Preload] autocompleteTask called with:', taskText);
     return ipcRenderer.invoke('autocomplete-task', taskText);
+  },
+  checkGmailAuth: (): Promise<boolean> => {
+    return ipcRenderer.invoke('check-gmail-auth');
+  },
+  triggerGmailAuth: (): Promise<{ success: boolean }> => {
+    return ipcRenderer.invoke('trigger-gmail-auth');
   }
 })
 

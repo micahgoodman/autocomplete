@@ -1,7 +1,9 @@
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import path from 'node:path'
 import { config } from 'dotenv'
 import { AutocompleteService } from './autocompleteService'
+import { spawn } from 'child_process'
+import fs from 'fs'
 
 // Determine if running in development mode
 const isDev = process.env.NODE_ENV === 'development'
@@ -63,6 +65,79 @@ ipcMain.handle('autocomplete-task', async (_event, taskText: string) => {
   const result = await autocompleteService.completeTask(taskText);
   console.log('[Main] Autocomplete result:', result.success ? 'Success' : 'Failed');
   return result;
+});
+
+ipcMain.handle('check-gmail-auth', async () => {
+  const credentialsPath = path.join(__dirname, '../../../mcp-server/credentials.json');
+  return fs.existsSync(credentialsPath);
+});
+
+ipcMain.handle('trigger-gmail-auth', async () => {
+  return new Promise((resolve, reject) => {
+    const mcpServerPath = path.join(__dirname, '../../../mcp-server');
+    const scriptPath = path.join(mcpServerPath, 'dist', 'index.js');
+    console.log('[Main] Starting Gmail authentication via Node:', scriptPath);
+
+    const env = {
+      ...process.env,
+      PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin',
+    } as NodeJS.ProcessEnv;
+
+    const authProcess = spawn('node', [scriptPath, 'auth'], {
+      cwd: mcpServerPath,
+      stdio: 'pipe',
+      shell: false,
+      env,
+    });
+
+    let outputBuffer = '';
+    let resolved = false;
+
+    // Capture stdout to detect authentication completion
+    authProcess.stdout?.on('data', (data) => {
+      const output = data.toString();
+      outputBuffer += output;
+      console.log('[Main] Auth output:', output);
+
+      // Check for success message
+      if (output.includes('Authentication completed successfully') && !resolved) {
+        resolved = true;
+        console.log('[Main] Gmail authentication completed successfully');
+        resolve({ success: true });
+      }
+    });
+
+    authProcess.stderr?.on('data', (data) => {
+      console.error('[Main] Auth error:', data.toString());
+    });
+
+    authProcess.on('close', (code) => {
+      if (resolved) {
+        // Already resolved, nothing to do
+        return;
+      }
+
+      // Only reject if process failed
+      if (code !== 0) {
+        console.error('[Main] Gmail authentication failed with code:', code);
+        resolved = true;
+        reject(new Error(`Authentication failed with code ${code}`));
+      } else {
+        // Process exited successfully - assume auth completed
+        console.log('[Main] Auth process exited successfully');
+        resolved = true;
+        resolve({ success: true });
+      }
+    });
+
+    authProcess.on('error', (error) => {
+      if (!resolved) {
+        resolved = true;
+        console.error('[Main] Failed to start authentication:', error);
+        reject(error);
+      }
+    });
+  });
 });
 
 // App lifecycle
