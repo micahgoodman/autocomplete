@@ -1,13 +1,18 @@
 import React, { useState } from 'react';
 import { ChecklistItem as ChecklistItemType } from '../../../api';
 
+import { AutocompleteDraft } from './AutocompleteDraft';
+import { ChecklistWorkTypeSelector } from './ChecklistWorkTypeSelector';
+
 type Props = {
   item: ChecklistItemType;
   index: number;
   onToggle: (index: number) => void;
   onDelete: (index: number) => void;
   onUpdate: (index: number, newText: string) => void;
+  onSetDraft: (index: number, draft: string | null) => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
+  onSetWorkType: (index: number, type: 'email' | 'coding' | 'calendar', value: boolean) => void;
   disabled?: boolean;
   draggedIndex: number | null;
   onDragStart: (index: number) => void;
@@ -22,7 +27,9 @@ export function DraggableChecklistItem({
   onToggle,
   onDelete,
   onUpdate,
+  onSetDraft,
   onMoveItem,
+  onSetWorkType,
   disabled = false,
   draggedIndex,
   onDragStart,
@@ -34,6 +41,9 @@ export function DraggableChecklistItem({
   const [editText, setEditText] = useState(item.text);
   const [isAutocompleting, setIsAutocompleting] = useState(false);
   const [autocompleteError, setAutocompleteError] = useState<string | null>(null);
+  const [isEditingDraft, setIsEditingDraft] = useState(false);
+  const [editDraftText, setEditDraftText] = useState(item.draft || '');
+  const [showWorkTypes, setShowWorkTypes] = useState(true);
 
   const isDragging = draggedIndex === index;
   const showDropZoneAbove = dropTargetIndex === index;
@@ -103,9 +113,51 @@ export function DraggableChecklistItem({
     }
   };
 
+  const handleDeleteDraft = () => {
+    if (disabled) return;
+    onSetDraft(index, null);
+    setIsEditingDraft(false);
+  };
+
+  const handleRetryDraft = () => {
+    handleAutocomplete();
+  };
+
+  const handleApproveDraft = () => {
+    // eslint-disable-next-line no-console
+    console.log(`[ChecklistItem] Approved draft for checklist item ${index}`);
+  };
+
+  const handleStartDraftEdit = () => {
+    if (disabled) return;
+    setIsEditingDraft(true);
+    setEditDraftText(item.draft || '');
+  };
+
+  const handleSaveDraft = () => {
+    const next = editDraftText.trim();
+    onSetDraft(index, next || null);
+    setIsEditingDraft(false);
+  };
+
+  const handleCancelDraft = () => {
+    setEditDraftText(item.draft || '');
+    setIsEditingDraft(false);
+  };
+
+  const handleDraftKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      handleCancelDraft();
+    } else if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      handleSaveDraft();
+    }
+  };
+
   const handleAutocomplete = async () => {
     if (disabled || isAutocompleting) return;
-    
+
     // Check if running in Electron
     console.log('[Component] window.electron:', window.electron);
     console.log('[Component] typeof window:', typeof window);
@@ -124,7 +176,7 @@ export function DraggableChecklistItem({
       const response = await window.electron.autocompleteTask(item.text);
       
       if (response.success) {
-        onUpdate(index, response.completedText);
+        onSetDraft(index, response.completedText);
       } else {
         setAutocompleteError(response.error || 'Autocomplete failed');
         setTimeout(() => setAutocompleteError(null), 5000);
@@ -179,161 +231,230 @@ export function DraggableChecklistItem({
           padding: '12px 16px',
           borderBottom: '1px solid #f0ede8',
           display: 'flex',
-          alignItems: 'center',
-          gap: 12,
+          flexDirection: 'column',
+          gap: 8,
           backgroundColor: item.completed ? '#f9f7f4' : '#fefdfb',
           borderRadius: '8px',
           opacity: isDragging ? 0.4 : 1,
           transition: 'opacity 0.2s, background-color 0.2s',
         }}
       >
-        {/* Drag Handle */}
-        {!disabled && !isEditing && (
-          <div
-            draggable
-            onDragStart={handleDragStart}
-            onDragEnd={handleDragEnd}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          {/* Drag Handle */}
+          {!disabled && !isEditing && (
+            <div
+              draggable
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              style={{
+                cursor: isDragging ? 'grabbing' : 'grab',
+                color: '#8a7c6f',
+                fontSize: '16px',
+                flexShrink: 0,
+                lineHeight: 1,
+                userSelect: 'none',
+              }}
+              title="Drag to reorder"
+            >
+              ⋮⋮
+            </div>
+          )}
+
+          {/* Checkbox */}
+          <input
+            type="checkbox"
+            checked={item.completed}
+            onChange={() => onToggle(index)}
+            disabled={disabled}
             style={{
-              cursor: isDragging ? 'grabbing' : 'grab',
-              color: '#8a7c6f',
-              fontSize: '16px',
+              width: 18,
+              height: 18,
+              cursor: 'pointer',
               flexShrink: 0,
-              lineHeight: 1,
-              userSelect: 'none',
             }}
-            title="Drag to reorder"
-          >
-            ⋮⋮
+          />
+
+          {/* Item Text - Editable */}
+          {isEditing ? (
+            <input
+              id={`input-edit-item-${index}`}
+              type="text"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              onBlur={handleSaveEdit}
+              onKeyDown={handleKeyDown}
+              autoFocus
+              style={{
+                flex: 1,
+                fontSize: '14px',
+                padding: '8px 12px',
+                border: '2px solid #bc915c',
+                borderRadius: '8px',
+                outline: 'none',
+              }}
+            />
+          ) : (
+            <span
+              onClick={handleStartEdit}
+              style={{
+                flex: 1,
+                fontSize: '14px',
+                color: item.completed ? '#8a7c6f' : '#2d251f',
+                textDecoration: item.completed ? 'line-through' : 'none',
+                wordBreak: 'break-word',
+                cursor: disabled ? 'default' : 'text',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                transition: 'background-color 0.2s',
+              }}
+              onMouseEnter={(e) => {
+                if (!disabled) e.currentTarget.style.backgroundColor = '#f9f7f4';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'transparent';
+              }}
+              title="Click to edit"
+            >
+              {item.text}
+            </span>
+          )}
+
+          {/* Preferences Button */}
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => setShowWorkTypes((prev) => !prev)}
+              className="checklist-item-preferences-button"
+              aria-pressed={showWorkTypes}
+              title={showWorkTypes ? 'Hide preferences' : 'Show preferences'}
+              disabled={disabled}
+            >
+              ⚙️
+            </button>
+          )}
+
+          {/* Autocomplete Button */}
+          {!isEditing && (
+            <button
+              type="button"
+              id={`autocomplete-btn-${index}`}
+              onClick={handleAutocomplete}
+              disabled={disabled || isAutocompleting}
+              style={{
+                padding: '8px 12px',
+                fontSize: '12px',
+                color: isAutocompleting ? '#8a7c6f' : '#2196f3',
+                background: 'transparent',
+                border: '1px solid #bbdefb',
+                borderRadius: '8px',
+                cursor: isAutocompleting ? 'wait' : 'pointer',
+                flexShrink: 0,
+                opacity: 0.7,
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+              title={autocompleteError || 'Use Claude AI to enhance this task'}
+            >
+              {isAutocompleting ? 'Processing...' : 'Autocomplete'}
+            </button>
+          )}
+
+          {/* Delete Button */}
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => onDelete(index)}
+              disabled={disabled}
+              style={{
+                padding: '8px 12px',
+                fontSize: '12px',
+                color: '#c4704f',
+                background: 'transparent',
+                border: '1px solid #e8e4df',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                flexShrink: 0,
+                opacity: 0.7,
+                transition: 'opacity 0.2s',
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
+              onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
+            >
+              Delete
+            </button>
+          )}
+
+          {/* Error Message */}
+          {autocompleteError && (
+            <div style={{
+              position: 'absolute',
+              bottom: -30,
+              right: 16,
+              fontSize: '11px',
+              color: '#d32f2f',
+              backgroundColor: '#ffebee',
+              padding: '4px 8px',
+              borderRadius: '4px',
+              maxWidth: '300px',
+              wordWrap: 'break-word',
+              zIndex: 100,
+            }}>
+              {autocompleteError}
+            </div>
+          )}
+        </div>
+
+        {showWorkTypes && (
+          <ChecklistWorkTypeSelector
+            workTypes={item.workTypes}
+            disabled={disabled}
+            onChange={(type, value) => onSetWorkType(index, type, value)}
+          />
+        )}
+
+        {item.draft && !isEditingDraft && (
+          <div style={{ marginLeft: '34px', cursor: disabled ? 'default' : 'text' }} title={disabled ? undefined : 'Click to edit draft'}>
+            <AutocompleteDraft
+              text={item.draft}
+              onDelete={handleDeleteDraft}
+              onRetry={handleRetryDraft}
+              onApprove={handleApproveDraft}
+              onEdit={handleStartDraftEdit}
+              disabled={disabled}
+              isProcessing={isAutocompleting}
+            />
           </div>
         )}
 
-        {/* Checkbox */}
-        <input
-          type="checkbox"
-          checked={item.completed}
-          onChange={() => onToggle(index)}
-          disabled={disabled}
-          style={{
-            width: 18,
-            height: 18,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        />
-
-        {/* Item Text - Editable */}
-        {isEditing ? (
-          <input
-            id={`input-edit-item-${index}`}
-            type="text"
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            onBlur={handleSaveEdit}
-            onKeyDown={handleKeyDown}
-            autoFocus
-            style={{
-              flex: 1,
-              fontSize: '14px',
-              padding: '8px 12px',
-              border: '2px solid #bc915c',
-              borderRadius: '8px',
-              outline: 'none',
-            }}
-          />
-        ) : (
-          <span
-            onClick={handleStartEdit}
-            style={{
-              flex: 1,
-              fontSize: '14px',
-              color: item.completed ? '#8a7c6f' : '#2d251f',
-              textDecoration: item.completed ? 'line-through' : 'none',
-              wordBreak: 'break-word',
-              cursor: disabled ? 'default' : 'text',
-              padding: '8px 12px',
-              borderRadius: '8px',
-              transition: 'background-color 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              if (!disabled) e.currentTarget.style.backgroundColor = '#f9f7f4';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'transparent';
-            }}
-            title="Click to edit"
-          >
-            {item.text}
-          </span>
-        )}
-
-        {/* Autocomplete Button */}
-        {!isEditing && (
-          <button
-            type="button"
-            id={`autocomplete-btn-${index}`}
-            onClick={handleAutocomplete}
-            disabled={disabled || isAutocompleting}
-            style={{
-              padding: '8px 12px',
-              fontSize: '12px',
-              color: isAutocompleting ? '#8a7c6f' : '#2196f3',
-              background: 'transparent',
-              border: '1px solid #bbdefb',
-              borderRadius: '8px',
-              cursor: isAutocompleting ? 'wait' : 'pointer',
-              flexShrink: 0,
-              opacity: 0.7,
-              transition: 'opacity 0.2s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-            title={autocompleteError || 'Use Claude AI to enhance this task'}
-          >
-            {isAutocompleting ? 'Processing...' : 'Autocomplete'}
-          </button>
-        )}
-
-        {/* Delete Button */}
-        {!isEditing && (
-          <button
-            type="button"
-            onClick={() => onDelete(index)}
-            disabled={disabled}
-            style={{
-              padding: '8px 12px',
-              fontSize: '12px',
-              color: '#c4704f',
-              background: 'transparent',
-              border: '1px solid #e8e4df',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              flexShrink: 0,
-              opacity: 0.7,
-              transition: 'opacity 0.2s',
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.opacity = '1'}
-            onMouseLeave={(e) => e.currentTarget.style.opacity = '0.7'}
-          >
-            Delete
-          </button>
-        )}
-
-        {/* Error Message */}
-        {autocompleteError && (
-          <div style={{
-            position: 'absolute',
-            bottom: -30,
-            right: 16,
-            fontSize: '11px',
-            color: '#d32f2f',
-            backgroundColor: '#ffebee',
-            padding: '4px 8px',
-            borderRadius: '4px',
-            maxWidth: '300px',
-            wordWrap: 'break-word',
-            zIndex: 100,
-          }}>
-            {autocompleteError}
+        {isEditingDraft && (
+          <div style={{ marginLeft: '34px' }}>
+            <textarea
+              value={editDraftText}
+              onChange={(e) => setEditDraftText(e.target.value)}
+              onBlur={handleSaveDraft}
+              onKeyDown={handleDraftKeyDown}
+              autoFocus
+              style={{
+                width: '100%',
+                minHeight: '120px',
+                border: '2px solid #bc915c',
+                backgroundColor: '#fefdfb',
+                borderRadius: '8px',
+                padding: '10px 12px',
+                color: '#2d251f',
+                fontSize: '13px',
+                lineHeight: 1.5,
+                whiteSpace: 'pre-wrap',
+                resize: 'vertical',
+              }}
+            />
           </div>
         )}
       </div>

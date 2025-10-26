@@ -209,6 +209,36 @@ export function ChecklistDetailView({
     }
   };
 
+  const handleSetDraft = async (index: number, draft: string | null) => {
+    try {
+      const updatedItems = [...checklist.items];
+      updatedItems[index] = { ...updatedItems[index], draft };
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      onShowToast('Failed to save draft');
+    }
+  };
+
+  const handleSetWorkType = async (
+    index: number,
+    type: 'email' | 'coding' | 'calendar',
+    value: boolean
+  ) => {
+    try {
+      const updatedItems = [...checklist.items];
+      const current = updatedItems[index];
+      const workTypes = { ...(current.workTypes || {}), [type]: value } as NonNullable<typeof current.workTypes>;
+      updatedItems[index] = { ...current, workTypes };
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      onShowToast('Failed to update work type');
+    }
+  };
+
   const cardContext = { type: 'checklist', id: checklist.id } as const;
 
   return (
@@ -336,7 +366,9 @@ export function ChecklistDetailView({
                   onToggle={handleToggleItem}
                   onDelete={handleDeleteItem}
                   onUpdate={handleUpdateItem}
+                  onSetDraft={handleSetDraft}
                   onMoveItem={handleMoveItem}
+                  onSetWorkType={handleSetWorkType}
                   disabled={togglingIndex === index || addingItem}
                   draggedIndex={draggedIndex}
                   onDragStart={setDraggedIndex}

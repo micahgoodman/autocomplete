@@ -660,6 +660,55 @@ button, .btn {
   display: none; 
 }
 
+/* Checklist item work type selector */
+.checklist-item-work-types {
+  margin-left: 34px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.checklist-item-work-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b5d52;
+  font-size: 12px;
+}
+
+.checklist-item-work-type-input {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+.checklist-item-work-type-icon {
+  line-height: 1;
+  font-size: 24px;
+}
+
+.checklist-item-preferences-button {
+  padding: 8px 12px;
+  font-size: 16px;
+  color: #6b5d52;
+  background: transparent;
+  border: 1px solid #e0d8ce;
+  border-radius: 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+.checklist-item-preferences-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.checklist-item-preferences-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 /* Responsive design */
 @media (max-width: 1024px) {
   main {

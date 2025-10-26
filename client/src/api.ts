@@ -81,6 +81,12 @@ export async function fetchParentsOf(childType: string, childId: string): Promis
 export type ChecklistItem = {
   text: string;
   completed: boolean;
+  draft?: string | null;
+  workTypes?: {
+    email?: boolean;
+    coding?: boolean;
+    calendar?: boolean;
+  };
 };
 
 export type Checklist = {
