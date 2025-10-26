@@ -1,0 +1,10 @@
+node_modules
+client/dist*
+client/out
+.env*
+*.log
+#.env.production
+#client/.env.production
+.firebase/hosting*
+supabase/.temp*
+.windsurf*

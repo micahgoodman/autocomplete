@@ -1,0 +1,60 @@
+<concept_spec>
+
+concept Concept
+
+purpose
+    to store user-created concept specifications and metadata for reuse and discovery
+
+state
+    a set of Concepts with
+        a concept String
+        a owner String
+        a title String
+        a description String
+        a content String
+        a createdAt String
+        a updatedAt String
+
+actions
+    create (concept: String, owner: String, title: String, description: String, content: String) : (concept: String)
+        create a new concept record with metadata and content
+        return the concept id
+
+    update (concept: String, title: String) : (concept: String)
+        update the concept title if it exists
+        return the concept id
+
+    update (concept: String, description: String) : (concept: String)
+        update the concept description if it exists
+        return the concept id
+
+    update (concept: String, content: String) : (concept: String)
+        update the concept content if it exists
+        return the concept id
+
+    delete (concept: String) : (concept: String)
+        delete the concept if it exists
+        return the concept id
+
+queries
+    _get (concept: String) : (concept: String, owner: String, title: String, description: String, content: String, createdAt: String, updatedAt: String)
+        fetch a specific concept
+
+    _listAll () : (concept: String, owner: String, title: String, description: String, content: String, createdAt: String, updatedAt: String)
+        list all concepts
+
+    _listByOwner (owner: String) : (concept: String, title: String, createdAt: String)
+        list concepts by owner
+
+    _getPayload (concept: String) : (payload: Json)
+        fetch a specific concept wrapped in payload
+
+    _listAllPayload () : (payload: Json)
+        list all concepts sorted and wrapped in payload
+
+operational principle
+    after create (owner: "u1", title: "T", description: "D", content: "C") : (concept: c)
+    and update (concept: c, title: "T2") : (concept: c)
+    then _get (concept: c) shows title "T2"
+
+</concept_spec>

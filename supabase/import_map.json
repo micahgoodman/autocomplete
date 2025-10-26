@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "engine/": "../engine/",
+    "concepts/": "../concepts/",
+    "syncs/": "../syncs/",
+    "db/": "../db/",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2"
+  }
+}
