@@ -535,16 +535,13 @@ async function main() {
 		process.exit(0);
 	}
 
-	// Check if credentials exist, if not, trigger authentication automatically
+	// Check if credentials exist, if not, exit with error instead of auto-authenticating
+	// Auto-authentication hangs when the server is spawned by the Claude Agent SDK
 	if (!fs.existsSync(CREDENTIALS_PATH)) {
-		console.log('No credentials found. Starting authentication flow...');
-		try {
-			await authenticate();
-			console.log('Authentication completed successfully');
-		} catch (error) {
-			console.error('Authentication failed:', error);
-			process.exit(1);
-		}
+		console.error('Gmail credentials not found at:', CREDENTIALS_PATH);
+		console.error('Please run: node dist/index.js auth');
+		console.error('Or use the Auth modal in the Electron app to authenticate.');
+		process.exit(1);
 	}
 
 	// Initialize Gmail API

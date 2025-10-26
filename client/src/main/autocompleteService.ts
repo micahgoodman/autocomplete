@@ -73,137 +73,183 @@ export class AutocompleteService {
 		}
 	}
 
+	private isEmailTask(taskText: string): boolean {
+		const emailKeywords = [
+			'email', 'e-mail', 'gmail', 'send', 'reply', 'forward',
+			'draft', 'compose', 'inbox', 'message', 'mail',
+			'@', 'recipient', 'subject:', 'cc:', 'bcc:',
+			'attachment', 'filter', 'label'
+		];
+		
+		const lowerTask = taskText.toLowerCase();
+		return emailKeywords.some(keyword => lowerTask.includes(keyword));
+	}
+
 	private async runAutocompleteTask(taskText: string): Promise<AutocompleteResponse> {
 		try {
 			console.log('[AutocompleteService] Starting Claude Agent query...');
 			const prompt = `Complete this task. Show your work in steps if needed.\n\nTask: ${taskText}\n\nProvide your output directly. For emails, include a Subject line and body. For code or documents, provide the complete content. For complex tasks, you can break it down into steps.`;
 
-			// Set up MCP server path (relative to client directory)
-			// Use the compiled dist/index.js file
-			const mcpServerPath = path.join(
-				__dirname,
-				'../../../mcp-server/dist/index.js'
-			);
-			console.log(
-				'[AutocompleteService] MCP server path:',
-				mcpServerPath
-			);
+			const needsGmail = this.isEmailTask(taskText);
+			console.log('[AutocompleteService] Task requires Gmail tools:', needsGmail);
 
-			// Check if MCP server file exists
-			const fs = require('fs');
-			if (!fs.existsSync(mcpServerPath)) {
-				console.error('[AutocompleteService] MCP server file not found at:', mcpServerPath);
-				return {
-					steps: [],
-					success: false,
-					error: `MCP server not found at ${mcpServerPath}. Please build the MCP server first.`,
-				};
-			}
+			let queryOptions: any = {
+				model: 'claude-3-5-sonnet-20241022',
+				includePartialMessages: false,
+				permissionMode: 'bypassPermissions', // Auto-approve all tool uses including MCP tools
+			};
 
-			// Find the actual Node.js executable path (not Electron)
-			// In Electron, process.execPath points to Electron itself, not Node
-			const { execSync } = require('child_process');
-			let nodePath = '/usr/local/bin/node'; // Default path
-			
-			try {
-				// Try to find the actual node executable path
-				const foundPath = execSync('which node', { encoding: 'utf8' }).trim();
-				if (foundPath && fs.existsSync(foundPath)) {
-					nodePath = foundPath;
-				}
-			} catch (error) {
-				// Fallback to common Node.js installation paths
-				const commonPaths = [
-					'/usr/local/bin/node',
-					'/opt/homebrew/bin/node',
-					'/usr/bin/node',
-				];
+			if (needsGmail) {
+				// Set up MCP server for Gmail tasks using the correct SDK configuration
+				const mcpServerPath = path.join(
+					__dirname,
+					'../../../mcp-server/dist/index.js'
+				);
 				
-				for (const commonPath of commonPaths) {
-					if (fs.existsSync(commonPath)) {
-						nodePath = commonPath;
-						break;
+				const fs = require('fs');
+				if (!fs.existsSync(mcpServerPath)) {
+					console.error('[AutocompleteService] MCP server file not found at:', mcpServerPath);
+					return {
+						steps: [],
+						success: false,
+						error: `Gmail MCP server not found at ${mcpServerPath}. Please build the MCP server first.`,
+					};
+				}
+
+				// Check if Gmail is authenticated
+				const credentialsPath = path.join(
+					path.dirname(mcpServerPath),
+					'..',
+					'credentials.json'
+				);
+				
+				if (!fs.existsSync(credentialsPath)) {
+					console.warn('[AutocompleteService] Gmail credentials not found at:', credentialsPath);
+					return {
+						steps: [],
+						success: false,
+						error: 'Gmail not authenticated. Please authenticate Gmail first using the Auth modal.',
+					};
+				}
+
+				// Find Node.js executable
+				const { execSync } = require('child_process');
+				let nodePath = 'node'; // Default to 'node' in PATH
+				
+				try {
+					const foundPath = execSync('which node', { encoding: 'utf8' }).trim();
+					if (foundPath && fs.existsSync(foundPath)) {
+						nodePath = foundPath;
+					}
+				} catch (error) {
+					const commonPaths = [
+						'/usr/local/bin/node',
+						'/opt/homebrew/bin/node',
+						'/usr/bin/node',
+					];
+					for (const commonPath of commonPaths) {
+						if (fs.existsSync(commonPath)) {
+							nodePath = commonPath;
+							break;
+						}
 					}
 				}
-			}
 
-			console.log('[AutocompleteService] Using Node.js from:', nodePath);
-			console.log('[AutocompleteService] Current working directory:', process.cwd());
+				console.log('[AutocompleteService] Using Gmail MCP server');
+				console.log('[AutocompleteService] MCP server path:', mcpServerPath);
+				console.log('[AutocompleteService] Node command:', nodePath);
+				console.log('[AutocompleteService] Credentials exist:', fs.existsSync(credentialsPath));
 
-			// Verify Node.js is accessible
-			if (!fs.existsSync(nodePath)) {
-				console.error('[AutocompleteService] Node.js not found at:', nodePath);
-				return {
-					steps: [],
-					success: false,
-					error: `Node.js executable not found at ${nodePath}. Please ensure Node.js is installed.`,
+				// Use the correct SDK configuration format for MCP servers
+				queryOptions.mcpServers = {
+					gmail: {
+						type: 'stdio',
+						command: nodePath,
+						args: [mcpServerPath],
+						env: {
+							...process.env,
+							PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin',
+						},
+					},
 				};
+				
+				console.log('[AutocompleteService] MCP server configured in mcpServers option');
+			} else {
+				console.log('[AutocompleteService] Using Claude directly (no Gmail tools needed)');
 			}
 
-			// Build the PATH environment variable to ensure node is findable
-			const pathEnv = [
-				path.dirname(nodePath), // Add the directory containing node
-				process.env.PATH,
-				'/usr/local/bin',
-				'/usr/bin',
-				'/bin',
-				'/opt/homebrew/bin',
-			].filter(Boolean).join(':');
-
-			console.log('[AutocompleteService] Calling Claude Agent SDK without MCP server...');
-			console.log('[AutocompleteService] Task:', taskText);
-
-			// Don't use the MCP server - it's only needed for Gmail tasks
-			// For general autocomplete, we can use the SDK directly
 			const stream = query({
 				prompt,
-				options: {
-					model: 'claude-3-5-sonnet-20241022',
-					includePartialMessages: false,
-					// No executable/executableArgs = no MCP server = no hanging!
-					env: {
-						...process.env,
-						ANTHROPIC_API_KEY: this.apiKey || undefined,
-					},
-				},
+				options: queryOptions,
 			});
 
 			const steps: Array<{ content: string; timestamp: string }> = [];
 			let messageCount = 0;
+			let hasReceivedAnyMessage = false;
 
 			console.log('[AutocompleteService] Starting to consume stream...');
+			console.log('[AutocompleteService] Waiting for messages from', needsGmail ? 'MCP server' : 'Claude API', '...');
 
-			for await (const message of stream) {
-				messageCount++;
-				console.log('[AutocompleteService] Received message #', messageCount, 'type:', message.type);
-				this.logSdkMessage(message);
+			try {
+				for await (const message of stream) {
+					hasReceivedAnyMessage = true;
+					messageCount++;
+					console.log('[AutocompleteService] Received message #', messageCount, 'type:', message.type);
+					this.logSdkMessage(message);
 
-				// Collect all assistant messages as steps
-				if (message.type === 'assistant') {
-					const raw = this.extractAssistantText(message);
-					if (!raw) {
-						console.log('[AutocompleteService] No text extracted from assistant message');
-						continue;
+					// Check for error messages
+					if ((message as any).error) {
+						console.error('[AutocompleteService] Error in message:', (message as any).error);
 					}
 
-					// Clean up the content but don't be too aggressive
-					const cleaned = this.cleanAssistantContent(raw);
-					if (!cleaned || cleaned.length < 20) {
-						console.log('[AutocompleteService] Cleaned content too short or empty');
-						continue;
+					// Collect all assistant messages as steps
+					if (message.type === 'assistant') {
+						const raw = this.extractAssistantText(message);
+						if (!raw) {
+							console.log('[AutocompleteService] No text extracted from assistant message');
+							continue;
+						}
+
+						// Clean up the content but don't be too aggressive
+						const cleaned = this.cleanAssistantContent(raw);
+						if (!cleaned || cleaned.length < 20) {
+							console.log('[AutocompleteService] Cleaned content too short or empty');
+							continue;
+						}
+
+						steps.push({
+							content: cleaned,
+							timestamp: new Date().toISOString(),
+						});
+						console.log('[AutocompleteService] Captured step:', cleaned.substring(0, 100));
 					}
 
-					steps.push({
-						content: cleaned,
-						timestamp: new Date().toISOString(),
-					});
-					console.log('[AutocompleteService] Captured step:', cleaned.substring(0, 100));
+					// Check for result messages which indicate the stream is done
+					if (message.type === 'result') {
+						console.log('[AutocompleteService] Received result message, stream should complete soon');
+						const resultMsg = message as any;
+						if (resultMsg.subtype === 'error') {
+							console.error('[AutocompleteService] Result error:', resultMsg);
+						}
+					}
 				}
+			} catch (streamError) {
+				console.error('[AutocompleteService] Error consuming stream:', streamError);
+				if (!hasReceivedAnyMessage) {
+					throw new Error(`Stream failed to produce any messages. ${needsGmail ? 'MCP server may have failed to start or respond.' : 'API connection issue.'} Original error: ${streamError instanceof Error ? streamError.message : String(streamError)}`);
+				}
+				throw streamError;
+			}
 
-				// Check for result messages which indicate the stream is done
-				if (message.type === 'result') {
-					console.log('[AutocompleteService] Received result message, stream should complete soon');
-				}
+			if (!hasReceivedAnyMessage) {
+				console.error('[AutocompleteService] Stream completed without receiving any messages');
+				return {
+					steps: [],
+					success: false,
+					error: needsGmail 
+						? 'MCP server did not respond. The server may have started but failed to communicate with Claude.'
+						: 'No response from Claude API. Check your API key and network connection.',
+				};
 			}
 
 			console.log('[AutocompleteService] Stream completed. Total messages:', messageCount);
@@ -323,7 +369,7 @@ export class AutocompleteService {
 			)
 			.trim();
 
-		// Choose the most draft-like block using heuristics
+		// Choose the most draft-like blocks using heuristics
 		const blocks = cleaned
 			.split(/\n\s*\n/)
 			.map((b) => b.trim())
@@ -334,6 +380,7 @@ export class AutocompleteService {
 			/(I\'?ve|I have|Would you like me|this draft|the draft is|I can revise|let me (know|mark))/i;
 		const greetRe = /^\s*(Hi|Hello|Dear)\b/m;
 		const subjectRe = /Subject:\s*/i;
+		const bodyRe = /Body:\s*/i;
 		const signoffRe = /(Best|Regards|Sincerely),?/i;
 		const headingRe = /^#{1,3}\s+/m;
 		const listRe = /^\s*(\d+\.|-|•|\*)/m;
@@ -341,6 +388,7 @@ export class AutocompleteService {
 		function score(block: string): number {
 			let s = 0;
 			if (subjectRe.test(block)) s += 3;
+			if (bodyRe.test(block)) s += 3;
 			if (greetRe.test(block)) s += 3;
 			if (headingRe.test(block)) s += 4; // Strong signal for structured content
 			if (listRe.test(block)) s += 2;
@@ -350,20 +398,27 @@ export class AutocompleteService {
 			return s;
 		}
 
-		let best = blocks[0];
-		let bestScore = score(best);
-		for (let i = 1; i < blocks.length; i++) {
-			const b = blocks[i];
-			const sc = score(b);
-			if (sc > bestScore) {
-				best = b;
-				bestScore = sc;
+		// Check if this looks like structured email content (Subject/Body)
+		const hasEmailStructure = blocks.some(b => subjectRe.test(b)) && 
+		                          (blocks.some(b => bodyRe.test(b)) || blocks.some(b => greetRe.test(b)));
+
+		if (hasEmailStructure) {
+			// Keep all non-meta blocks for email-structured content
+			const contentBlocks = blocks.filter(b => score(b) > 0);
+			if (contentBlocks.length > 0) {
+				return contentBlocks.join('\n\n');
 			}
 		}
 
-		// Require at least a minimal score to avoid commentary
-		if (bestScore <= 0 && cleaned) return cleaned.trim() || null;
-		return best || cleaned || null;
+		// For other content, keep all high-scoring blocks (score > 0)
+		const goodBlocks = blocks.filter(b => score(b) > 0);
+		if (goodBlocks.length > 0) {
+			// If we have multiple good blocks, keep them all
+			return goodBlocks.join('\n\n');
+		}
+
+		// Fallback: return the cleaned content or null
+		return cleaned.trim() || null;
 	}
 
 	private extractAssistantText(message: SDKMessage): string | null {
