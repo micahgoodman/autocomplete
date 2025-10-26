@@ -3,6 +3,7 @@ client/dist*
 client/out
 .env*
 *.log
+credentials.json
 #.env.production
 #client/.env.production
 .firebase/hosting*

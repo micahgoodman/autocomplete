@@ -6,6 +6,8 @@ export interface AutocompleteResponse {
 
 export interface ElectronAPI {
   autocompleteTask: (taskText: string) => Promise<AutocompleteResponse>;
+  checkGmailAuth: () => Promise<boolean>;
+  triggerGmailAuth: () => Promise<{ success: boolean }>;
 }
 
 declare global {

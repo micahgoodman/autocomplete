@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { ChecklistItem as ChecklistItemType } from '../../../api';
+import { useAuth } from '../../../App';
 
 import { AutocompleteDraft } from './AutocompleteDraft';
 import { ChecklistWorkTypeSelector } from './ChecklistWorkTypeSelector';
@@ -37,6 +38,7 @@ export function DraggableChecklistItem({
   dropTargetIndex,
   onDropTargetChange,
 }: Props) {
+  const { requestAuth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
   const [isAutocompleting, setIsAutocompleting] = useState(false);
@@ -167,6 +169,19 @@ export function DraggableChecklistItem({
       setTimeout(() => setAutocompleteError(null), 5000);
       return;
     }
+
+    // Check if Gmail is authenticated before attempting autocomplete
+    try {
+      const isAuthenticated = await window.electron.checkGmailAuth();
+      if (!isAuthenticated) {
+        console.log('[Component] Gmail not authenticated, showing auth modal...');
+        requestAuth();
+        return;
+      }
+    } catch (error) {
+      console.error('[Component] Error checking Gmail auth:', error);
+    }
+
     console.log('[Component] Calling autocompleteTask for:', item.text);
     
     setIsAutocompleting(true);

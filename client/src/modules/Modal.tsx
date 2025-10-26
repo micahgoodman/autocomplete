@@ -5,11 +5,12 @@ type Props = {
   onClose: () => void;
   children: React.ReactNode;
   fullScreen?: boolean;
+  small?: boolean;
   headerActions?: React.ReactNode;
   contentClassName?: string;
 };
 
-export function Modal({ title, onClose, children, fullScreen = false, headerActions, contentClassName }: Props) {
+export function Modal({ title, onClose, children, fullScreen = false, small = false, headerActions, contentClassName }: Props) {
   return (
     <div className="modal" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className={(fullScreen ? 'modal-content modal-content--fullscreen' : 'modal-content') + (contentClassName ? ` ${contentClassName}` : '')}>

@@ -9,6 +9,7 @@ type Props = {
   onConfirm: () => void;
   onCancel: () => void;
   isDestructive?: boolean;
+  isProcessing?: boolean;
 };
 
 export function ConfirmModal({
@@ -19,6 +20,7 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
   isDestructive = false,
+  isProcessing = false,
 }: Props) {
   return (
     <Modal small title={title} onClose={onCancel} contentClassName="modal-content--sm">
@@ -42,6 +44,8 @@ export function ConfirmModal({
           className={`btn ${isDestructive ? 'danger' : 'confirm'}`}
           onClick={onConfirm}
           id="btn-confirm-ok"
+          disabled={isProcessing}
+          style={{ opacity: isProcessing ? 0.5 : 1, cursor: isProcessing ? 'not-allowed' : 'pointer' }}
         >
           {confirmText}
         </button>

@@ -535,6 +535,18 @@ async function main() {
 		process.exit(0);
 	}
 
+	// Check if credentials exist, if not, trigger authentication automatically
+	if (!fs.existsSync(CREDENTIALS_PATH)) {
+		console.log('No credentials found. Starting authentication flow...');
+		try {
+			await authenticate();
+			console.log('Authentication completed successfully');
+		} catch (error) {
+			console.error('Authentication failed:', error);
+			process.exit(1);
+		}
+	}
+
 	// Initialize Gmail API
 	const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
