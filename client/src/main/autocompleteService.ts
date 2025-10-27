@@ -16,7 +16,17 @@ export interface AutocompleteResponse {
   }>;
   success: boolean;
   error?: string;
+  isEmailTask?: boolean;
 }
+
+export interface ProgressUpdate {
+  type: 'step' | 'status' | 'error';
+  content?: string;
+  message?: string;
+  timestamp: string;
+}
+
+export type ProgressCallback = (update: ProgressUpdate) => void;
 
 export class AutocompleteService {
 	private apiKey: string | null = null;
@@ -38,7 +48,7 @@ export class AutocompleteService {
 		this.apiKey = apiKey ?? null;
 	}
 
-	async completeTask(taskText: string): Promise<AutocompleteResponse> {
+	async completeTask(taskText: string, onProgress?: ProgressCallback): Promise<AutocompleteResponse> {
 		console.log('[AutocompleteService] completeTask called with:', taskText);
 		console.log('[AutocompleteService] API key available:', !!this.apiKey);
 
@@ -59,7 +69,7 @@ export class AutocompleteService {
 			}, TIMEOUT_MS);
 		});
 
-		const taskPromise = this.runAutocompleteTask(taskText);
+		const taskPromise = this.runAutocompleteTask(taskText, onProgress);
 
 		try {
 			return await Promise.race([taskPromise, timeoutPromise]);
@@ -85,13 +95,26 @@ export class AutocompleteService {
 		return emailKeywords.some(keyword => lowerTask.includes(keyword));
 	}
 
-	private async runAutocompleteTask(taskText: string): Promise<AutocompleteResponse> {
+	private async runAutocompleteTask(taskText: string, onProgress?: ProgressCallback): Promise<AutocompleteResponse> {
 		try {
 			console.log('[AutocompleteService] Starting Claude Agent query...');
-			const prompt = `Complete this task. Show your work in steps if needed.\n\nTask: ${taskText}\n\nProvide your output directly. For emails, include a Subject line and body. For code or documents, provide the complete content. For complex tasks, you can break it down into steps.`;
-
+			
 			const needsGmail = this.isEmailTask(taskText);
 			console.log('[AutocompleteService] Task requires Gmail tools:', needsGmail);
+
+			// Send initial status update
+			if (onProgress) {
+				onProgress({
+					type: 'status',
+					message: needsGmail ? 'Preparing email draft...' : 'Processing task...',
+					timestamp: new Date().toISOString(),
+				});
+			}
+
+			// For email tasks, just have Claude generate the draft content without calling MCP
+			const prompt = needsGmail
+				? `Draft an email for this task. Provide the complete email draft with recipient, subject and body.\n\nTask: ${taskText}\n\nFormat your response as:\nTo: [recipient email address]\nSubject: [subject line]\n\nBody:\n[email body content]\n\nIMPORTANT: You must extract or infer the recipient email address from the task. If the task mentions a person's name, include their email address in the "To:" field.`
+				: `Complete this task. Show your work in steps if needed.\n\nTask: ${taskText}\n\nProvide your output directly. For code or documents, provide the complete content. For complex tasks, you can break it down into steps.`;
 
 			let queryOptions: any = {
 				model: 'claude-3-5-sonnet-20241022',
@@ -99,84 +122,8 @@ export class AutocompleteService {
 				permissionMode: 'bypassPermissions', // Auto-approve all tool uses including MCP tools
 			};
 
-			if (needsGmail) {
-				// Set up MCP server for Gmail tasks using the correct SDK configuration
-				const mcpServerPath = path.join(
-					__dirname,
-					'../../../mcp-server/dist/index.js'
-				);
-				
-				const fs = require('fs');
-				if (!fs.existsSync(mcpServerPath)) {
-					console.error('[AutocompleteService] MCP server file not found at:', mcpServerPath);
-					return {
-						steps: [],
-						success: false,
-						error: `Gmail MCP server not found at ${mcpServerPath}. Please build the MCP server first.`,
-					};
-				}
-
-				// Check if Gmail is authenticated
-				const credentialsPath = path.join(
-					path.dirname(mcpServerPath),
-					'..',
-					'credentials.json'
-				);
-				
-				if (!fs.existsSync(credentialsPath)) {
-					console.warn('[AutocompleteService] Gmail credentials not found at:', credentialsPath);
-					return {
-						steps: [],
-						success: false,
-						error: 'Gmail not authenticated. Please authenticate Gmail first using the Auth modal.',
-					};
-				}
-
-				// Find Node.js executable
-				const { execSync } = require('child_process');
-				let nodePath = 'node'; // Default to 'node' in PATH
-				
-				try {
-					const foundPath = execSync('which node', { encoding: 'utf8' }).trim();
-					if (foundPath && fs.existsSync(foundPath)) {
-						nodePath = foundPath;
-					}
-				} catch (error) {
-					const commonPaths = [
-						'/usr/local/bin/node',
-						'/opt/homebrew/bin/node',
-						'/usr/bin/node',
-					];
-					for (const commonPath of commonPaths) {
-						if (fs.existsSync(commonPath)) {
-							nodePath = commonPath;
-							break;
-						}
-					}
-				}
-
-				console.log('[AutocompleteService] Using Gmail MCP server');
-				console.log('[AutocompleteService] MCP server path:', mcpServerPath);
-				console.log('[AutocompleteService] Node command:', nodePath);
-				console.log('[AutocompleteService] Credentials exist:', fs.existsSync(credentialsPath));
-
-				// Use the correct SDK configuration format for MCP servers
-				queryOptions.mcpServers = {
-					gmail: {
-						type: 'stdio',
-						command: nodePath,
-						args: [mcpServerPath],
-						env: {
-							...process.env,
-							PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin',
-						},
-					},
-				};
-				
-				console.log('[AutocompleteService] MCP server configured in mcpServers option');
-			} else {
-				console.log('[AutocompleteService] Using Claude directly (no Gmail tools needed)');
-			}
+			// Don't configure MCP server for email tasks - we'll create the draft on approval
+			console.log('[AutocompleteService] Using Claude directly (MCP server will be called on approval for email tasks)');
 
 			const stream = query({
 				prompt,
@@ -189,6 +136,14 @@ export class AutocompleteService {
 
 			console.log('[AutocompleteService] Starting to consume stream...');
 			console.log('[AutocompleteService] Waiting for messages from', needsGmail ? 'MCP server' : 'Claude API', '...');
+
+			if (onProgress) {
+				onProgress({
+					type: 'status',
+					message: 'Waiting for response...',
+					timestamp: new Date().toISOString(),
+				});
+			}
 
 			try {
 				for await (const message of stream) {
@@ -217,11 +172,21 @@ export class AutocompleteService {
 							continue;
 						}
 
+						const timestamp = new Date().toISOString();
 						steps.push({
 							content: cleaned,
-							timestamp: new Date().toISOString(),
+							timestamp,
 						});
 						console.log('[AutocompleteService] Captured step:', cleaned.substring(0, 100));
+
+						// Send progress update with the new step
+						if (onProgress) {
+							onProgress({
+								type: 'step',
+								content: cleaned,
+								timestamp,
+							});
+						}
 					}
 
 					// Check for result messages which indicate the stream is done
@@ -267,6 +232,7 @@ export class AutocompleteService {
 			return {
 				steps,
 				success: true,
+				isEmailTask: needsGmail,
 			};
 		} catch (error) {
 			console.error('[AutocompleteService] Error during Claude Agent query:', error);

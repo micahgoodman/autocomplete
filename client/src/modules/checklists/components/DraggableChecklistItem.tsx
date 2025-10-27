@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ChecklistItem as ChecklistItemType } from '../../../api';
 import { useAuth } from '../../../App';
+import type { ProgressUpdate } from '../../../electron';
 
 import { AutocompleteDraft } from './AutocompleteDraft';
 import { AgentSteps } from './AgentSteps';
@@ -12,7 +13,7 @@ type Props = {
   onToggle: (index: number) => void;
   onDelete: (index: number) => void;
   onUpdate: (index: number, newText: string) => void;
-  onSetDraft: (index: number, draft: string | null) => void;
+  onSetDraft: (index: number, draft: string | null, isEmailTask?: boolean) => void;
   onSetSteps: (index: number, steps: Array<{ content: string; timestamp: string }>) => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onSetWorkType: (index: number, type: 'email' | 'coding' | 'calendar', value: boolean) => void;
@@ -45,10 +46,15 @@ export function DraggableChecklistItem({
   const [isEditing, setIsEditing] = useState(false);
   const [editText, setEditText] = useState(item.text);
   const [isAutocompleting, setIsAutocompleting] = useState(false);
+  const [isApproving, setIsApproving] = useState(false);
   const [autocompleteError, setAutocompleteError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [isEditingDraft, setIsEditingDraft] = useState(false);
   const [editDraftText, setEditDraftText] = useState(item.draft || '');
   const [showWorkTypes, setShowWorkTypes] = useState(true);
+  const [progressStatus, setProgressStatus] = useState<string | null>(null);
+  const [progressSteps, setProgressSteps] = useState<Array<{ content: string; timestamp: string }>>([]);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const isDragging = draggedIndex === index;
   const showDropZoneAbove = dropTargetIndex === index;
@@ -133,9 +139,49 @@ export function DraggableChecklistItem({
     handleAutocomplete();
   };
 
-  const handleApproveDraft = () => {
-    // eslint-disable-next-line no-console
-    console.log(`[ChecklistItem] Approved draft for checklist item ${index}`);
+  const handleApproveDraft = async () => {
+    if (!item.draft || !item.isEmailTask) {
+      console.log(`[ChecklistItem] Approved non-email draft for checklist item ${index}`);
+      return;
+    }
+
+    // For email tasks, create the draft in Gmail via MCP server
+    if (!window.electron || !window.electron.createGmailDraft) {
+      console.error('[ChecklistItem] Electron API not available');
+      setSuccessMessage(null);
+      setAutocompleteError('Gmail draft creation is only available in the Electron app');
+      setTimeout(() => setAutocompleteError(null), 5000);
+      return;
+    }
+
+    console.log('[ChecklistItem] Creating Gmail draft...');
+    setIsApproving(true);
+    setAutocompleteError(null);
+
+    try {
+      const result = await window.electron.createGmailDraft(item.draft);
+      if (result.success) {
+        console.log('[ChecklistItem] Gmail draft created successfully:', result.draftId);
+        // Show friendly success message even if no draftId is provided
+        setAutocompleteError(null);
+        setSuccessMessage(result.message || 'Success! Please check your drafts');
+        setTimeout(() => setSuccessMessage(null), 5000);
+        // Clear the draft and steps after successful creation
+        onSetDraft(index, null);
+        onSetSteps(index, []);
+      } else {
+        setSuccessMessage(null);
+        setAutocompleteError(result.error || 'Failed to create Gmail draft');
+        setTimeout(() => setAutocompleteError(null), 5000);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setSuccessMessage(null);
+      setAutocompleteError(errorMessage);
+      setTimeout(() => setAutocompleteError(null), 5000);
+    } finally {
+      setIsApproving(false);
+    }
   };
 
   const handleApproveSteps = () => {
@@ -179,6 +225,47 @@ export function DraggableChecklistItem({
     }
   };
 
+  // Set up progress listener
+  useEffect(() => {
+    if (!window.electron?.onAutocompleteProgress) return;
+
+    // Clean up previous listener if any
+    if (cleanupRef.current) {
+      cleanupRef.current();
+      cleanupRef.current = null;
+    }
+
+    // Set up new listener when autocompleting
+    if (isAutocompleting) {
+      const cleanup = window.electron.onAutocompleteProgress((update: ProgressUpdate) => {
+        console.log('[Component] Progress update:', update);
+        
+        if (update.type === 'status') {
+          setProgressStatus(update.message || null);
+        } else if (update.type === 'step' && update.content) {
+          setProgressSteps(prev => {
+            const newSteps = [...prev, { content: update.content!, timestamp: update.timestamp }];
+            // Update the parent component with the new steps
+            onSetSteps(index, newSteps);
+            return newSteps;
+          });
+        } else if (update.type === 'error') {
+          setSuccessMessage(null);
+          setAutocompleteError(update.message || 'An error occurred');
+        }
+      });
+      
+      cleanupRef.current = cleanup;
+    }
+
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = null;
+      }
+    };
+  }, [isAutocompleting, index, onSetSteps]);
+
   const handleAutocomplete = async () => {
     if (disabled || isAutocompleting) return;
 
@@ -187,6 +274,7 @@ export function DraggableChecklistItem({
     console.log('[Component] typeof window:', typeof window);
     if (!window.electron || !window.electron.autocompleteTask) {
       console.error('[Component] Electron API not available');
+      setSuccessMessage(null);
       setAutocompleteError('Autocomplete is only available in the Electron app');
       setTimeout(() => setAutocompleteError(null), 5000);
       return;
@@ -206,6 +294,9 @@ export function DraggableChecklistItem({
 
     console.log('[Component] Calling autocompleteTask for:', item.text);
     
+    // Reset progress state
+    setProgressSteps([]);
+    setProgressStatus('Starting...');
     setIsAutocompleting(true);
     setAutocompleteError(null);
     
@@ -214,28 +305,41 @@ export function DraggableChecklistItem({
       console.log('[Component] Autocomplete response:', response);
       
       if (response.success) {
-        onSetSteps(index, response.steps || []);
+        // For email tasks, extract the draft content from steps and show in AutocompleteDraft
+        if (response.isEmailTask && response.steps && response.steps.length > 0) {
+          // Combine all steps into a single draft
+          const draftContent = response.steps.map(s => s.content).join('\n\n');
+          onSetDraft(index, draftContent, true);
+        } else {
+          // For non-email tasks, show steps as before
+          onSetSteps(index, response.steps || []);
+        }
       } else {
+        setSuccessMessage(null);
         setAutocompleteError(response.error || 'Autocomplete failed');
         setTimeout(() => setAutocompleteError(null), 5000);
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      setSuccessMessage(null);
       setAutocompleteError(errorMessage);
       setTimeout(() => setAutocompleteError(null), 5000);
     } finally {
       setIsAutocompleting(false);
+      setProgressStatus(null);
+      setProgressSteps([]);
     }
   };
 
   return (
-    <li
-      id={`checklist-item-${index}`}
-      style={{
-        position: 'relative',
-        marginBottom: '4px',
-      }}
-    >
+    <>
+      <li
+        id={`checklist-item-${index}`}
+        style={{
+          position: 'relative',
+          marginBottom: '4px',
+        }}
+      >
       {/* Drop zone above */}
       <div
         onDragOver={handleDragOverTop}
@@ -429,25 +533,39 @@ export function DraggableChecklistItem({
             </button>
           )}
 
-          {/* Error Message */}
-          {autocompleteError && (
-            <div style={{
-              position: 'absolute',
-              bottom: -30,
-              right: 16,
-              fontSize: '11px',
-              color: '#d32f2f',
-              backgroundColor: '#ffebee',
-              padding: '4px 8px',
-              borderRadius: '4px',
-              maxWidth: '300px',
-              wordWrap: 'break-word',
-              zIndex: 100,
-            }}>
-              {autocompleteError}
-            </div>
-          )}
         </div>
+
+        {/* Progress Status */}
+        {isAutocompleting && progressStatus && (
+          <div style={{
+            marginLeft: '34px',
+            marginTop: '8px',
+            padding: '8px 12px',
+            backgroundColor: '#e3f2fd',
+            border: '1px solid #bbdefb',
+            borderRadius: '8px',
+            fontSize: '12px',
+            color: '#1976d2',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <div style={{
+              width: '12px',
+              height: '12px',
+              border: '2px solid #1976d2',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+            <span>{progressStatus}</span>
+            <style>{`
+              @keyframes spin {
+                to { transform: rotate(360deg); }
+              }
+            `}</style>
+          </div>
+        )}
 
         {showWorkTypes && (
           <ChecklistWorkTypeSelector
@@ -465,8 +583,9 @@ export function DraggableChecklistItem({
               onRetry={handleRetryDraft}
               onApprove={handleApproveDraft}
               onEdit={handleStartDraftEdit}
-              disabled={disabled}
+              disabled={disabled || isApproving}
               isProcessing={isAutocompleting}
+              isApproving={isApproving}
             />
           </div>
         )}
@@ -537,6 +656,31 @@ export function DraggableChecklistItem({
           zIndex: 5,
         }} />
       )}
-    </li>
+      </li>
+
+      {(autocompleteError || successMessage) && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            padding: '16px 28px',
+            borderRadius: '12px',
+            fontSize: '15px',
+            fontWeight: 600,
+            color: successMessage ? '#1b5e20' : '#b71c1c',
+            backgroundColor: successMessage ? 'rgba(232, 245, 233, 0.95)' : 'rgba(255, 235, 238, 0.95)',
+            border: successMessage ? '1px solid #a5d6a7' : '1px solid #ef9a9a',
+            boxShadow: '0 12px 30px rgba(0,0,0,0.18)',
+            textAlign: 'center',
+            minWidth: '280px',
+            zIndex: 1000,
+          }}
+        >
+          {successMessage || autocompleteError}
+        </div>
+      )}
+    </>
   );
 }

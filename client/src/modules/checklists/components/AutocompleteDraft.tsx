@@ -8,6 +8,7 @@ type Props = {
   onEdit?: () => void;
   disabled?: boolean;
   isProcessing?: boolean;
+  isApproving?: boolean;
 };
 
 export function AutocompleteDraft({
@@ -18,6 +19,7 @@ export function AutocompleteDraft({
   onEdit,
   disabled = false,
   isProcessing = false,
+  isApproving = false,
 }: Props) {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -145,10 +147,12 @@ export function AutocompleteDraft({
                 ...buttonBaseStyle,
                 borderColor: '#c8e6c9',
                 color: '#2e7d32',
+                cursor: disabled || isApproving ? 'not-allowed' : 'pointer',
+                opacity: disabled || isApproving ? 0.5 : 1,
               }}
-              disabled={disabled}
+              disabled={disabled || isApproving}
             >
-              Approve
+              {isApproving ? 'Approving…' : 'Approve'}
             </button>
           </div>
         </div>

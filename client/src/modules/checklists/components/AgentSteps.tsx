@@ -71,15 +71,21 @@ export function AgentSteps({
   };
 
   return (
-    <div
-      style={{
-        border: '1px solid #e8e4df',
-        backgroundColor: '#f9f7f4',
-        borderRadius: '8px',
-        padding: '12px 14px',
-        color: '#2d251f',
-      }}
-    >
+    <>
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
+      <div
+        style={{
+          border: '1px solid #e8e4df',
+          backgroundColor: '#f9f7f4',
+          borderRadius: '8px',
+          padding: '12px 14px',
+          color: '#2d251f',
+        }}
+      >
       <div
         style={{
           display: 'flex',
@@ -88,8 +94,18 @@ export function AgentSteps({
           gap: 12,
         }}
       >
-        <strong style={{ fontSize: '13px' }}>
+        <strong style={{ fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px' }}>
           Draft ({steps.length} {steps.length === 1 ? 'step' : 'steps'})
+          {isProcessing && (
+            <div style={{
+              width: '10px',
+              height: '10px',
+              border: '2px solid #2196f3',
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }} />
+          )}
         </strong>
         <button
           type="button"
@@ -228,5 +244,6 @@ export function AgentSteps({
         </div>
       )}
     </div>
+    </>
   );
 }

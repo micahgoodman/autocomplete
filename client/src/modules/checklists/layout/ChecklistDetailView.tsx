@@ -209,10 +209,14 @@ export function ChecklistDetailView({
     }
   };
 
-  const handleSetDraft = async (index: number, draft: string | null) => {
+  const handleSetDraft = async (index: number, draft: string | null, isEmailTask?: boolean) => {
     try {
       const updatedItems = [...checklist.items];
-      updatedItems[index] = { ...updatedItems[index], draft };
+      updatedItems[index] = { 
+        ...updatedItems[index], 
+        draft,
+        ...(isEmailTask !== undefined && { isEmailTask })
+      };
       await updateChecklist(checklist.id, { items: updatedItems });
       onUpdated();
     } catch (err) {

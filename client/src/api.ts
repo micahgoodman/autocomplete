@@ -91,6 +91,7 @@ export type ChecklistItem = {
     coding?: boolean;
     calendar?: boolean;
   };
+  isEmailTask?: boolean;
 };
 
 export type Checklist = {
