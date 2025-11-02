@@ -1,5 +1,5 @@
 import { useState, useEffect, createContext, useContext } from 'react';
-import { Header } from './modules/Header';
+import { Header, ViewMode } from './modules/Header';
 import { ModuleGrid } from './ui/generic/ModuleGrid';
 import { ConfirmModal } from './modules/ConfirmModal';
 // Register association resolvers (each module registers its own)
@@ -23,6 +23,28 @@ export const useAuth = () => {
 export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('sidebar');
+
+  // Load persisted view mode preference
+  useEffect(() => {
+    try {
+      const storedMode = localStorage.getItem('checklist-view-mode') as ViewMode | null;
+      if (storedMode === 'sidebar' || storedMode === 'whiteboard') {
+        setViewMode(storedMode);
+      }
+    } catch (error) {
+      console.warn('[App] Failed to load checklist view mode from storage:', error);
+    }
+  }, []);
+
+  const handleViewModeChange = (mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem('checklist-view-mode', mode);
+    } catch (error) {
+      console.warn('[App] Failed to persist checklist view mode:', error);
+    }
+  };
 
   useEffect(() => {
     // Check Gmail authentication on app startup
@@ -92,9 +114,9 @@ export default function App() {
   return (
     <AuthContext.Provider value={{ requestAuth }}>
       <div>
-        <Header />
+        <Header viewMode={viewMode} onViewModeChange={handleViewModeChange} />
         <main className="container" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <ModuleGrid />
+          <ModuleGrid viewMode={viewMode} />
         </main>
         
         {showAuthModal && (

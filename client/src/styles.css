@@ -27,10 +27,10 @@ header {
 }
 h1 { 
   margin: 0; 
-  font-size: 36px; 
+  font-size: 28px; 
   font-weight: 700; 
   color: #2d251f;
-  padding: 16px 0;
+  padding: 6px 0;
   letter-spacing: -0.025em;
 }
 
@@ -51,8 +51,8 @@ h1 {
 main { 
   display: grid; 
   grid-template-columns: 1fr; 
-  gap: 32px; 
-  padding: 16px 32px 32px 32px; 
+  gap: 16px; 
+  padding: 8px 32px 32px 32px; 
   max-width: 1200px;
   margin: 0 auto;
   min-height: calc(100vh - 120px);
@@ -60,7 +60,7 @@ main {
 
 /* Explicit padding for the main container wrapper */
 main.container {
-  padding: 16px 64px 32px 64px;
+  padding: 8px 64px 32px 64px;
 }
 
 /* Form styling */
@@ -713,11 +713,11 @@ button, .btn {
 @media (max-width: 1024px) {
   main {
     grid-template-columns: 1fr;
-    gap: 24px;
-    padding: 24px;
+    gap: 16px;
+    padding: 12px;
   }
   main.container {
-    padding: 24px;
+    padding: 12px;
   }
   .container {
     padding: 0 24px;
@@ -746,8 +746,8 @@ button, .btn {
     margin-right: 0;
   }
   h1 {
-    font-size: 24px;
-    padding: 16px 0;
+    font-size: 20px;
+    padding: 6px 0;
   }
   .header-bar .btn.primary {
     width: 100%;

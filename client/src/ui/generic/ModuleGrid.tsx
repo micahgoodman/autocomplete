@@ -1,4 +1,5 @@
 import { ChecklistManager } from '../../modules/checklists/ChecklistManagerModule';
+import { ViewMode } from '../../modules/Header';
 
 type Props = {
   /**
@@ -6,6 +7,7 @@ type Props = {
    * Useful for drag-source grids where you only need top-level items.
    */
   hideEmbedded?: boolean;
+  viewMode: ViewMode;
 };
 
 /**
@@ -13,10 +15,10 @@ type Props = {
  * 
  * A reusable grid layout that displays all module managers.
  */
-export function ModuleGrid({ hideEmbedded = false }: Props) {
+export function ModuleGrid({ hideEmbedded = false, viewMode }: Props) {
   return (
     <section style={{ marginTop: 24 }}>
-      <ChecklistManager hideEmbedded={hideEmbedded} />
+      <ChecklistManager hideEmbedded={hideEmbedded} viewMode={viewMode} />
     </section>
   );
 }

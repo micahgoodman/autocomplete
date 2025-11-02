@@ -4,11 +4,15 @@ import { Checklist } from '../../api';
 import { ChecklistAdapter } from '../../adapters/checklists/adapter';
 import { CreateChecklistModal } from './create/CreateChecklistModalModule';
 import { ChecklistLayout } from './layout/ChecklistLayout';
+import { ViewMode } from '../Header';
 import { useChecklistSelection } from './hooks/useChecklistSelection';
 
-type Props = { hideEmbedded?: boolean; };
+type Props = {
+  hideEmbedded?: boolean;
+  viewMode: ViewMode;
+};
 
-export function ChecklistManager({ hideEmbedded = false }: Props = {}) {
+export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -65,6 +69,7 @@ export function ChecklistManager({ hideEmbedded = false }: Props = {}) {
             }}
             onShowToast={showToast}
             hideEmbedded={hideEmbedded}
+            viewMode={viewMode}
           />
         )}
       </div>
