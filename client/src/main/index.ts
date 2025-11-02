@@ -75,76 +75,33 @@ ipcMain.handle('autocomplete-task', async (event, taskText: string) => {
 });
 
 ipcMain.handle('check-gmail-auth', async () => {
-  const credentialsPath = path.join(__dirname, '../../../mcp-server/credentials.json');
-  return fs.existsSync(credentialsPath);
+  // The Workspace MCP server handles authentication automatically when first used
+  // Check if OAuth credentials are configured
+  const hasOAuthCreds = !!(process.env.VITE_GOOGLE_OAUTH_CLIENT_ID && process.env.VITE_GOOGLE_OAUTH_CLIENT_SECRET);
+  console.log('[Main] Google OAuth credentials configured:', hasOAuthCreds);
+  return hasOAuthCreds;
 });
 
 ipcMain.handle('trigger-gmail-auth', async () => {
-  return new Promise((resolve, reject) => {
-    const mcpServerPath = path.join(__dirname, '../../../mcp-server');
-    const scriptPath = path.join(mcpServerPath, 'dist', 'index.js');
-    console.log('[Main] Starting Gmail authentication via Node:', scriptPath);
-
-    const env = {
-      ...process.env,
-      PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin',
-    } as NodeJS.ProcessEnv;
-
-    const authProcess = spawn('node', [scriptPath, 'auth'], {
-      cwd: mcpServerPath,
-      stdio: 'pipe',
-      shell: false,
-      env,
-    });
-
-    let outputBuffer = '';
-    let resolved = false;
-
-    // Capture stdout to detect authentication completion
-    authProcess.stdout?.on('data', (data) => {
-      const output = data.toString();
-      outputBuffer += output;
-      console.log('[Main] Auth output:', output);
-
-      // Check for success message
-      if (output.includes('Authentication completed successfully') && !resolved) {
-        resolved = true;
-        console.log('[Main] Gmail authentication completed successfully');
-        resolve({ success: true });
-      }
-    });
-
-    authProcess.stderr?.on('data', (data) => {
-      console.error('[Main] Auth error:', data.toString());
-    });
-
-    authProcess.on('close', (code) => {
-      if (resolved) {
-        // Already resolved, nothing to do
-        return;
-      }
-
-      // Only reject if process failed
-      if (code !== 0) {
-        console.error('[Main] Gmail authentication failed with code:', code);
-        resolved = true;
-        reject(new Error(`Authentication failed with code ${code}`));
-      } else {
-        // Process exited successfully - assume auth completed
-        console.log('[Main] Auth process exited successfully');
-        resolved = true;
-        resolve({ success: true });
-      }
-    });
-
-    authProcess.on('error', (error) => {
-      if (!resolved) {
-        resolved = true;
-        console.error('[Main] Failed to start authentication:', error);
-        reject(error);
-      }
-    });
-  });
+  // The Workspace MCP server handles OAuth flow automatically
+  // This handler now just validates that credentials are set
+  const oauthClientId = process.env.VITE_GOOGLE_OAUTH_CLIENT_ID?.trim();
+  const oauthClientSecret = process.env.VITE_GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+  
+  if (!oauthClientId || !oauthClientSecret) {
+    return {
+      success: false,
+      error: 'Google OAuth credentials not configured. Please set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_OAUTH_CLIENT_SECRET in your environment variables.',
+    };
+  }
+  
+  console.log('[Main] Google OAuth credentials are configured');
+  console.log('[Main] Authentication will occur automatically when using Google Workspace MCP tools');
+  
+  return {
+    success: true,
+    message: 'Google OAuth credentials configured. Authentication will occur automatically when using Gmail.',
+  };
 });
 
 ipcMain.handle('create-gmail-draft', async (_event, draftContent: string) => {
@@ -179,66 +136,46 @@ ipcMain.handle('create-gmail-draft', async (_event, draftContent: string) => {
       };
     }
     
-    // Use Claude Agent SDK to call the MCP server's draft_email tool
+    // Use Claude Agent SDK to call the Workspace MCP server's gmail_draft tool
     // Must use dynamic import for ES modules
     const { query } = await import('@anthropic-ai/claude-agent-sdk');
     
-    const mcpServerPath = path.join(__dirname, '../../../mcp-server/dist/index.js');
+    // Validate OAuth credentials
+    const oauthClientId = process.env.VITE_GOOGLE_OAUTH_CLIENT_ID?.trim();
+    const oauthClientSecret = process.env.VITE_GOOGLE_OAUTH_CLIENT_SECRET?.trim();
     
-    if (!fs.existsSync(mcpServerPath)) {
-      console.error('[Main] MCP server file not found at:', mcpServerPath);
+    if (!oauthClientId || !oauthClientSecret) {
+      console.error('[Main] Google OAuth credentials not found');
       return {
         success: false,
-        error: `Gmail MCP server not found at ${mcpServerPath}. Please build the MCP server first.`,
+        error: 'Google OAuth credentials not configured. Please set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_OAUTH_CLIENT_SECRET environment variables.',
       };
     }
     
-    // Find Node.js executable
-    const { execSync } = require('child_process');
-    let nodePath = 'node';
-    
-    try {
-      const foundPath = execSync('which node', { encoding: 'utf8' }).trim();
-      if (foundPath && fs.existsSync(foundPath)) {
-        nodePath = foundPath;
-      }
-    } catch (error) {
-      const commonPaths = [
-        '/usr/local/bin/node',
-        '/opt/homebrew/bin/node',
-        '/usr/bin/node',
-      ];
-      for (const commonPath of commonPaths) {
-        if (fs.existsSync(commonPath)) {
-          nodePath = commonPath;
-          break;
-        }
-      }
-    }
-    
-    console.log('[Main] Using MCP server to create draft');
+    console.log('[Main] Using Workspace MCP server to create draft');
     
     const prompt = `Create a Gmail draft with the following details:
 To: ${to}
 Subject: ${subject}
 Body: ${body}
 
-Use the draft_email tool to create this draft. Make sure to include the "to" parameter with the email address "${to}".`;
+Use the gmail_draft tool from the Google Workspace MCP server to create this draft. Make sure to include the recipient email address "${to}".`;
     
     const stream = query({
       prompt,
       options: {
-        model: 'claude-3-5-sonnet-20241022',
+        model: 'claude-haiku-4-5',
         includePartialMessages: false,
         permissionMode: 'bypassPermissions',
         mcpServers: {
-          gmail: {
-            type: 'stdio',
-            command: nodePath,
-            args: [mcpServerPath],
+          google_workspace: {
+            type: 'stdio' as const,
+            command: 'uvx',
+            args: ['workspace-mcp', '--tool-tier', 'core'],
             env: {
-              ...process.env,
-              PATH: process.env.PATH || '/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin',
+              GOOGLE_OAUTH_CLIENT_ID: oauthClientId,
+              GOOGLE_OAUTH_CLIENT_SECRET: oauthClientSecret,
+              OAUTHLIB_INSECURE_TRANSPORT: '1',
             },
           },
         },

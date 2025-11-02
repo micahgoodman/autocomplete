@@ -106,24 +106,48 @@ export class AutocompleteService {
 			if (onProgress) {
 				onProgress({
 					type: 'status',
-					message: needsGmail ? 'Preparing email draft...' : 'Processing task...',
+					message: needsGmail ? 'Preparing email draft with Google Workspace MCP...' : 'Processing task...',
 					timestamp: new Date().toISOString(),
 				});
 			}
 
-			// For email tasks, just have Claude generate the draft content without calling MCP
+			// Build the prompt for email tasks to use the MCP server tools directly
 			const prompt = needsGmail
-				? `Draft an email for this task. Provide the complete email draft with recipient, subject and body.\n\nTask: ${taskText}\n\nFormat your response as:\nTo: [recipient email address]\nSubject: [subject line]\n\nBody:\n[email body content]\n\nIMPORTANT: You must extract or infer the recipient email address from the task. If the task mentions a person's name, include their email address in the "To:" field.`
+				? `Create a Gmail draft for this task using the gmail_draft tool from the Google Workspace MCP server.\n\nTask: ${taskText}\n\nUse the gmail_draft tool to create the draft. Extract the recipient email, subject, and body from the task description. Make sure to call the tool with proper parameters.`
 				: `Complete this task. Show your work in steps if needed.\n\nTask: ${taskText}\n\nProvide your output directly. For code or documents, provide the complete content. For complex tasks, you can break it down into steps.`;
 
 			let queryOptions: any = {
-				model: 'claude-3-5-sonnet-20241022',
+				model: 'claude-haiku-4-5',
 				includePartialMessages: false,
 				permissionMode: 'bypassPermissions', // Auto-approve all tool uses including MCP tools
 			};
 
-			// Don't configure MCP server for email tasks - we'll create the draft on approval
-			console.log('[AutocompleteService] Using Claude directly (MCP server will be called on approval for email tasks)');
+			// Configure Workspace MCP server for email tasks
+			if (needsGmail) {
+				const oauthClientId = process.env.VITE_GOOGLE_OAUTH_CLIENT_ID?.trim();
+				const oauthClientSecret = process.env.VITE_GOOGLE_OAUTH_CLIENT_SECRET?.trim();
+				
+				if (!oauthClientId || !oauthClientSecret) {
+					console.error('[AutocompleteService] Google OAuth credentials not found');
+					throw new Error('Google OAuth credentials not configured. Please set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_OAUTH_CLIENT_SECRET environment variables.');
+				}
+
+				// Configure the Workspace MCP server
+				queryOptions.mcpServers = {
+					google_workspace: {
+						type: 'stdio' as const,
+						command: 'uvx',
+						args: ['workspace-mcp', '--tool-tier', 'core'],
+						env: {
+							GOOGLE_OAUTH_CLIENT_ID: oauthClientId,
+							GOOGLE_OAUTH_CLIENT_SECRET: oauthClientSecret,
+							OAUTHLIB_INSECURE_TRANSPORT: '1',
+						},
+					},
+				};
+				
+				console.log('[AutocompleteService] Configured Workspace MCP server for Gmail tools');
+			}
 
 			const stream = query({
 				prompt,
