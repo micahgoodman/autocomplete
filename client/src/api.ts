@@ -92,6 +92,8 @@ export type ChecklistItem = {
     calendar?: boolean;
   };
   isEmailTask?: boolean;
+  dueDate?: string | null; // ISO date string
+  urgency?: 'low' | 'medium' | 'high' | null;
 };
 
 export type Checklist = {

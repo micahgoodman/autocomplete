@@ -6,6 +6,7 @@ import type { ProgressUpdate } from '../../../electron';
 import { AutocompleteDraft } from './AutocompleteDraft';
 import { AgentSteps } from './AgentSteps';
 import { ChecklistWorkTypeSelector } from './ChecklistWorkTypeSelector';
+import { shouldHighlightItem, formatDueDate } from '../utils/itemHighlight';
 
 type Props = {
   item: ChecklistItemType;
@@ -17,6 +18,8 @@ type Props = {
   onSetSteps: (index: number, steps: Array<{ content: string; timestamp: string }>, isEmailTask?: boolean) => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onSetWorkType: (index: number, type: 'email' | 'coding' | 'calendar', value: boolean) => void;
+  onSetDueDate: (index: number, dueDate: string | null) => void;
+  onSetUrgency: (index: number, urgency: 'low' | 'medium' | 'high' | null) => void;
   disabled?: boolean;
   draggedIndex: number | null;
   onDragStart: (index: number) => void;
@@ -35,6 +38,8 @@ export function DraggableChecklistItem({
   onSetSteps,
   onMoveItem,
   onSetWorkType,
+  onSetDueDate,
+  onSetUrgency,
   disabled = false,
   draggedIndex,
   onDragStart,
@@ -59,6 +64,7 @@ export function DraggableChecklistItem({
   const isDragging = draggedIndex === index;
   const showDropZoneAbove = dropTargetIndex === index;
   const showDropZoneBelow = dropTargetIndex === index + 1;
+  const isHighlighted = shouldHighlightItem(item);
 
   // Log when draft or steps change
   useEffect(() => {
@@ -396,10 +402,11 @@ export function DraggableChecklistItem({
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
-          backgroundColor: item.completed ? '#f9f7f4' : '#fefdfb',
+          backgroundColor: item.completed ? '#f9f7f4' : (isHighlighted ? '#ffebee' : '#fefdfb'),
           borderRadius: '8px',
           opacity: isDragging ? 0.4 : 1,
           transition: 'opacity 0.2s, background-color 0.2s',
+          border: isHighlighted ? '2px solid #ef5350' : 'none',
         }}
       >
         <div
@@ -468,8 +475,9 @@ export function DraggableChecklistItem({
               style={{
                 flex: 1,
                 fontSize: '14px',
-                color: item.completed ? '#8a7c6f' : '#2d251f',
+                color: item.completed ? '#8a7c6f' : (isHighlighted ? '#c62828' : '#2d251f'),
                 textDecoration: item.completed ? 'line-through' : 'none',
+                fontWeight: isHighlighted ? 600 : 'normal',
                 wordBreak: 'break-word',
                 cursor: disabled ? 'default' : 'text',
                 padding: '8px 12px',
@@ -589,11 +597,94 @@ export function DraggableChecklistItem({
         )}
 
         {showWorkTypes && (
-          <ChecklistWorkTypeSelector
-            workTypes={item.workTypes}
-            disabled={disabled}
-            onChange={(type, value) => onSetWorkType(index, type, value)}
-          />
+          <>
+            <ChecklistWorkTypeSelector
+              workTypes={item.workTypes}
+              disabled={disabled}
+              onChange={(type, value) => onSetWorkType(index, type, value)}
+            />
+            
+            {/* Due Date and Urgency Controls */}
+            <div style={{
+              marginLeft: '34px',
+              display: 'flex',
+              gap: '12px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+            }}>
+              {/* Due Date */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '12px', color: '#6b5d52', fontWeight: 500 }}>Due:</label>
+                <input
+                  type="date"
+                  value={item.dueDate || ''}
+                  onChange={(e) => onSetDueDate(index, e.target.value || null)}
+                  disabled={disabled}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    border: '1px solid #d4cfc7',
+                    borderRadius: '6px',
+                    backgroundColor: '#fefdfb',
+                    cursor: disabled ? 'default' : 'pointer',
+                  }}
+                />
+                {item.dueDate && (
+                  <span style={{
+                    fontSize: '12px',
+                    color: isHighlighted ? '#c62828' : '#6b5d52',
+                    fontWeight: isHighlighted ? 600 : 'normal',
+                  }}>
+                    ({formatDueDate(item.dueDate)})
+                  </span>
+                )}
+                {item.dueDate && (
+                  <button
+                    type="button"
+                    onClick={() => onSetDueDate(index, null)}
+                    disabled={disabled}
+                    style={{
+                      padding: '4px 8px',
+                      fontSize: '11px',
+                      color: '#8a7c6f',
+                      background: 'transparent',
+                      border: '1px solid #e8e4df',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                    }}
+                    title="Clear due date"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+
+              {/* Urgency */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label style={{ fontSize: '12px', color: '#6b5d52', fontWeight: 500 }}>Urgency:</label>
+                <select
+                  value={item.urgency || ''}
+                  onChange={(e) => onSetUrgency(index, (e.target.value as 'low' | 'medium' | 'high') || null)}
+                  disabled={disabled}
+                  style={{
+                    padding: '6px 10px',
+                    fontSize: '12px',
+                    border: '1px solid #d4cfc7',
+                    borderRadius: '6px',
+                    backgroundColor: '#fefdfb',
+                    cursor: disabled ? 'default' : 'pointer',
+                    color: item.urgency === 'high' ? '#c62828' : (item.urgency === 'medium' ? '#f57c00' : '#6b5d52'),
+                    fontWeight: item.urgency === 'high' ? 600 : 'normal',
+                  }}
+                >
+                  <option value="">None</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+            </div>
+          </>
         )}
 
         {/* Render steps as draft or agent steps based on structure */}

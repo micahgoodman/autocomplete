@@ -275,6 +275,30 @@ export function ChecklistDetailView({
     }
   };
 
+  const handleSetDueDate = async (index: number, dueDate: string | null) => {
+    try {
+      const updatedItems = [...checklist.items];
+      updatedItems[index] = { ...updatedItems[index], dueDate };
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      onShowToast('Failed to update due date');
+    }
+  };
+
+  const handleSetUrgency = async (index: number, urgency: 'low' | 'medium' | 'high' | null) => {
+    try {
+      const updatedItems = [...checklist.items];
+      updatedItems[index] = { ...updatedItems[index], urgency };
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+    } catch (err) {
+      console.error(err);
+      onShowToast('Failed to update urgency');
+    }
+  };
+
   const handleFetchEmailsAsItems = async () => {
     if (!window.electron?.fetchUnreadEmails) {
       onShowToast('Email functionality not available');
@@ -516,6 +540,8 @@ export function ChecklistDetailView({
                   onSetSteps={handleSetSteps}
                   onMoveItem={handleMoveItem}
                   onSetWorkType={handleSetWorkType}
+                  onSetDueDate={handleSetDueDate}
+                  onSetUrgency={handleSetUrgency}
                   disabled={togglingIndex === index || addingItem}
                   draggedIndex={draggedIndex}
                   onDragStart={setDraggedIndex}

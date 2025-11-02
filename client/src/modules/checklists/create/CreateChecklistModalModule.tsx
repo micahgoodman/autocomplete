@@ -5,7 +5,9 @@ import { BulkItemInput } from './BulkItemInput';
 
 export function CreateChecklistModal({ onClose, onCreated, onError, contextType, contextId }: { onClose: () => void; onCreated: () => void; onError: (msg: string) => void; contextType?: string; contextId?: string; }) {
   const [name, setName] = useState('');
-  const [items, setItems] = useState<ChecklistItem[]>([{ text: '', completed: false }]);
+  const [items, setItems] = useState<ChecklistItem[]>([
+    { text: '', completed: false, dueDate: null, urgency: null },
+  ]);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [useBulkInput, setUseBulkInput] = useState(false);
@@ -33,7 +35,7 @@ export function CreateChecklistModal({ onClose, onCreated, onError, contextType,
       setCreating(true);
       await createChecklist(body);
       setName('');
-      setItems([{ text: '', completed: false }]);
+      setItems([{ text: '', completed: false, dueDate: null, urgency: null }]);
       onCreated();
     } catch (err) {
       console.error(err);
@@ -64,11 +66,34 @@ export function CreateChecklistModal({ onClose, onCreated, onError, contextType,
   };
 
   const addItem = () => {
-    setItems([...items, { text: '', completed: false }]);
+    setItems([
+      ...items,
+      { text: '', completed: false, dueDate: null, urgency: null },
+    ]);
+  };
+
+  const setItemDueDate = (index: number, dueDate: string | null) => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], dueDate };
+    setItems(updated);
+  };
+
+  const setItemUrgency = (
+    index: number,
+    urgency: 'low' | 'medium' | 'high' | null,
+  ) => {
+    const updated = [...items];
+    updated[index] = { ...updated[index], urgency };
+    setItems(updated);
   };
 
   const handleBulkParse = (parsedItems: ChecklistItem[]) => {
-    setItems(parsedItems);
+    const normalized = parsedItems.map((item) => ({
+      ...item,
+      dueDate: item.dueDate ?? null,
+      urgency: item.urgency ?? null,
+    }));
+    setItems(normalized);
   };
 
   // Keyboard shortcut handler
@@ -135,31 +160,137 @@ export function CreateChecklistModal({ onClose, onCreated, onError, contextType,
           ) : (
             <>
               {items.map((item, index) => (
-                <div key={index} style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={item.completed}
-                    onChange={() => toggleItemCompleted(index)}
-                    style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
-                  />
-                  <input
-                    id={`input-create-item-${index}`}
-                    type="text"
-                    value={item.text}
-                    onChange={(e) => updateItemText(index, e.target.value)}
-                    placeholder="Item text"
-                    style={{ flex: 1, padding: '12px 16px', fontSize: '14px' }}
-                  />
-                  {items.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeItem(index)}
-                      className="btn danger"
-                      style={{ padding: '12px 16px', fontSize: '14px' }}
+                <div
+                  key={index}
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 6,
+                    padding: '8px 10px',
+                    border: '1px solid #e8e4df',
+                    borderRadius: '8px',
+                    marginBottom: 8,
+                    backgroundColor: '#fefdfb',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: 8,
+                      alignItems: 'center',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={item.completed}
+                      onChange={() => toggleItemCompleted(index)}
+                      style={{ width: 18, height: 18, cursor: 'pointer', flexShrink: 0 }}
+                    />
+                    <input
+                      id={`input-create-item-${index}`}
+                      type="text"
+                      value={item.text}
+                      onChange={(e) => updateItemText(index, e.target.value)}
+                      placeholder="Item text"
+                      style={{ flex: 1, padding: '12px 16px', fontSize: '14px' }}
+                    />
+                    {items.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeItem(index)}
+                        className="btn danger"
+                        style={{ padding: '12px 16px', fontSize: '14px' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 12,
+                      paddingLeft: 26,
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
                     >
-                      Remove
-                    </button>
-                  )}
+                      <label
+                        htmlFor={`due-date-${index}`}
+                        style={{ fontSize: '12px', color: '#6b5d52', fontWeight: 500 }}
+                      >
+                        Due:
+                      </label>
+                      <input
+                        id={`due-date-${index}`}
+                        type="date"
+                        value={item.dueDate || ''}
+                        onChange={(e) =>
+                          setItemDueDate(index, e.target.value ? e.target.value : null)
+                        }
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '12px',
+                          border: '1px solid #d4cfc7',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                        }}
+                      />
+                      {item.dueDate && (
+                        <button
+                          type="button"
+                          onClick={() => setItemDueDate(index, null)}
+                          className="btn secondary"
+                          style={{ padding: '4px 8px', fontSize: '11px' }}
+                        >
+                          Clear
+                        </button>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <label
+                        htmlFor={`urgency-${index}`}
+                        style={{ fontSize: '12px', color: '#6b5d52', fontWeight: 500 }}
+                      >
+                        Urgency:
+                      </label>
+                      <select
+                        id={`urgency-${index}`}
+                        value={item.urgency || ''}
+                        onChange={(e) =>
+                          setItemUrgency(
+                            index,
+                            (e.target.value as 'low' | 'medium' | 'high') || null,
+                          )
+                        }
+                        style={{
+                          padding: '6px 10px',
+                          fontSize: '12px',
+                          border: '1px solid #d4cfc7',
+                          borderRadius: '6px',
+                          backgroundColor: '#fff',
+                        }}
+                      >
+                        <option value="">None</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                  </div>
                 </div>
               ))}
               <button
