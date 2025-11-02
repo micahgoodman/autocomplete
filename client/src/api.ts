@@ -134,3 +134,45 @@ export async function deleteChecklist(id: string) {
     headers: buildHeaders()
   }).then(res => json<{ ok: boolean }>(res));
 }
+
+/**
+ * 
+ * Notes
+ * 
+**/
+export type Note = {
+  id: string;
+  text: string;
+  dateCreated: string;
+};
+
+export async function fetchNotes(): Promise<Note[]> {
+  return fetch(url('/concepts?filter=note'), { headers: buildHeaders() }).then(res => json<Note[]>(res));
+}
+
+export async function fetchNotesByContext(contextType: string, contextId: string): Promise<Note[]> {
+  return fetch(url(`/concepts?filter=note&contextType=${encodeURIComponent(contextType)}&contextId=${encodeURIComponent(contextId)}`), { headers: buildHeaders() }).then(res => json<Note[]>(res));
+}
+
+export async function createNote(body: { text: string; context?: { type: string; id: string } }) {
+  return fetch(url('/concepts?filter=note'), {
+    method: 'POST',
+    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  }).then(res => json<{ id: string }>(res));
+}
+
+export async function updateNote(id: string, body: { text?: string }) {
+  return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
+    method: 'PATCH',
+    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(body)
+  }).then(res => json<{ ok: boolean }>(res));
+}
+
+export async function deleteNote(id: string) {
+  return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
+    method: 'DELETE',
+    headers: buildHeaders()
+  }).then(res => json<{ ok: boolean }>(res));
+}
