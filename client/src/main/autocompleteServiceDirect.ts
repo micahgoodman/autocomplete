@@ -20,6 +20,7 @@ export interface AutocompleteResponse {
 	success: boolean;
 	error?: string;
 	isEmailTask?: boolean;
+	isSimpleDraft?: boolean; // true for single-turn text responses without tool use
 }
 
 export interface ProgressUpdate {
@@ -81,8 +82,11 @@ export class AutocompleteServiceDirect {
 
 			const steps: Array<{ content: string; timestamp: string }> = [];
 			let continueLoop = true;
+			let usedTools = false;
+			let turnCount = 0;
 
 			while (continueLoop) {
+				turnCount++;
 				console.log('[AutocompleteServiceDirect] Creating message...');
 
 				const params: Anthropic.Messages.MessageCreateParams = {
@@ -115,6 +119,7 @@ export class AutocompleteServiceDirect {
 							});
 						}
 					} else if (block.type === 'tool_use') {
+						usedTools = true;
 						console.log('[AutocompleteServiceDirect] Tool use requested:', block.name);
 
 						// Execute the tool
@@ -173,10 +178,16 @@ export class AutocompleteServiceDirect {
 				}
 			}
 
+			// Determine if this is a simple draft (single-turn, no tool use)
+			// Allow multiple text blocks in a single response (steps.length >= 1)
+			const isSimpleDraft = turnCount === 1 && !usedTools && steps.length >= 1;
+			console.log('[AutocompleteServiceDirect] Component selection - turnCount:', turnCount, 'usedTools:', usedTools, 'steps.length:', steps.length, 'isSimpleDraft:', isSimpleDraft);
+			
 			return {
 				steps,
 				success: true,
 				isEmailTask: needsGmail,
+				isSimpleDraft,
 			};
 		} catch (error) {
 			console.error('[AutocompleteServiceDirect] Error:', error);
@@ -185,6 +196,45 @@ export class AutocompleteServiceDirect {
 				success: false,
 				error: error instanceof Error ? error.message : 'Unknown error',
 			};
+		}
+	}
+
+	async generateEmailActionSuggestion(params: {
+		subject: string;
+		snippet: string;
+		from: string;
+	}): Promise<string> {
+		const { subject, snippet, from } = params;
+		try {
+			console.log('[AutocompleteServiceDirect] Generating email action suggestion');
+			const response = await this.anthropic.messages.create({
+				model: 'claude-haiku-4-5',
+				max_tokens: 256,
+				system:
+					'You read email context and output one concise action a human should take. Respond with a short imperative sentence without surrounding quotes. Focus on the appropriate next actionable step in response to the email.',
+				messages: [
+					{
+						role: 'user',
+						content: `Sender: ${from || 'Unknown'}\nSubject: ${subject || '(none)'}\nExcerpt: ${snippet || '(none)'}\n\nWhat action should the user take in response? Provide one sentence.`,
+					},
+				],
+			});
+
+			const textBlock = response.content.find((block) => block.type === 'text');
+			let action = textBlock?.type === 'text' ? textBlock.text.trim() : '';
+			if (!action) {
+				return 'Respond to email and address any outstanding items';
+			}
+			// Clean up common prefixes or trailing punctuation
+			action = action
+				.replace(/^Action:\s*/i, '')
+				.replace(/^[-•\s]+/, '')
+				.replace(/"$/g, '')
+				.trim();
+			return action || 'Respond to email and address any outstanding items';
+		} catch (error) {
+			console.error('[AutocompleteServiceDirect] Failed to generate email action suggestion:', error);
+			return 'Respond to email and address any outstanding items';
 		}
 	}
 }

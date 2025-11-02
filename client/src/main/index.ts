@@ -5,7 +5,7 @@ import { AutocompleteService } from './autocompleteService'
 import { AutocompleteServiceDirect } from './autocompleteServiceDirect'
 import { spawn } from 'child_process'
 import fs from 'fs'
-import { checkGmailAuth, createGmailDraft } from './gmailService'
+import { checkGmailAuth, createGmailDraft, fetchUnreadEmails } from './gmailService'
 
 // Determine if running in development mode
 const isDev = process.env.NODE_ENV === 'development'
@@ -170,6 +170,49 @@ ipcMain.handle('create-gmail-draft', async (_event, draftContent: string) => {
     }
   } catch (error) {
     console.error('[Main] Error in create-gmail-draft:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+    };
+  }
+});
+
+ipcMain.handle('fetch-unread-emails', async (_event, maxResults: number = 5) => {
+  console.log(`[Main] Received fetch-unread-emails request for ${maxResults} emails`);
+  
+  try {
+    const emails = await fetchUnreadEmails(maxResults);
+    console.log(`[Main] Successfully fetched ${emails.length} emails`);
+    return {
+      success: true,
+      emails,
+    };
+  } catch (error) {
+    console.error('[Main] Error fetching unread emails:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      emails: [],
+    };
+  }
+});
+
+ipcMain.handle('generate-email-action', async (_event, emailContext: { subject?: string; snippet?: string; from?: string }) => {
+  console.log('[Main] Received generate-email-action request');
+
+  try {
+    const action = await autocompleteService.generateEmailActionSuggestion({
+      subject: emailContext?.subject ?? '',
+      snippet: emailContext?.snippet ?? '',
+      from: emailContext?.from ?? '',
+    });
+
+    return {
+      success: true,
+      action,
+    };
+  } catch (error) {
+    console.error('[Main] Error generating email action suggestion:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error occurred',

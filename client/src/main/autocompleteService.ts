@@ -19,6 +19,7 @@ export interface AutocompleteResponse {
   success: boolean;
   error?: string;
   isEmailTask?: boolean;
+  isSimpleDraft?: boolean; // true for single-turn text responses without tool use
 }
 
 export interface ProgressUpdate {
@@ -146,6 +147,8 @@ export class AutocompleteService {
 			const steps: Array<{ content: string; timestamp: string }> = [];
 			let messageCount = 0;
 			let hasReceivedAnyMessage = false;
+			let usedTools = false;
+			let assistantMessageCount = 0;
 
 			console.log('[AutocompleteService] Starting to consume stream...');
 			console.log('[AutocompleteService] Waiting for messages from', needsGmail ? 'MCP server' : 'Claude API', '...');
@@ -176,6 +179,7 @@ export class AutocompleteService {
 						if (msg?.content && Array.isArray(msg.content)) {
 							for (const block of msg.content) {
 								if (block.type === 'tool_use') {
+									usedTools = true;
 									console.log('[AutocompleteService] Claude wants to use tool:', block.name);
 									
 									// Execute the tool
@@ -205,6 +209,7 @@ export class AutocompleteService {
 
 					// Collect all assistant messages as steps
 					if (message.type === 'assistant') {
+						assistantMessageCount++;
 						const raw = this.extractAssistantText(message);
 						if (!raw) {
 							console.log('[AutocompleteService] No text extracted from assistant message');
@@ -275,10 +280,16 @@ export class AutocompleteService {
 				};
 			}
 
+			// Determine if this is a simple draft (single assistant message, no tool use)
+			// Allow multiple text blocks in a single response (steps.length >= 1)
+			const isSimpleDraft = assistantMessageCount === 1 && !usedTools && steps.length >= 1;
+			console.log('[AutocompleteService] Component selection - assistantMessageCount:', assistantMessageCount, 'usedTools:', usedTools, 'steps.length:', steps.length, 'isSimpleDraft:', isSimpleDraft);
+			
 			return {
 				steps,
 				success: true,
 				isEmailTask: needsGmail,
+				isSimpleDraft,
 			};
 		} catch (error) {
 			console.error('[AutocompleteService] Error during Claude Agent query:', error);

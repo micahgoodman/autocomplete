@@ -13,6 +13,7 @@ import http from 'http';
 const SCOPES = [
 	'https://www.googleapis.com/auth/gmail.compose',
 	'https://www.googleapis.com/auth/gmail.modify',
+	'https://www.googleapis.com/auth/gmail.readonly',
 ];
 
 // Token storage path
@@ -247,5 +248,76 @@ export function checkGmailAuth(): boolean {
 		return !!(clientId && clientSecret);
 	} catch {
 		return false;
+	}
+}
+
+export interface UnreadEmail {
+	id: string;
+	from: string;
+	subject: string;
+	snippet: string;
+	date: string;
+}
+
+/**
+ * Fetch unread emails from Gmail
+ */
+export async function fetchUnreadEmails(maxResults: number = 5): Promise<UnreadEmail[]> {
+	try {
+		console.log(`[GmailService] Fetching ${maxResults} unread emails...`);
+		
+		// Get authenticated client
+		const auth = await getAuthenticatedClient();
+		
+		// Create Gmail API client
+		const gmail = google.gmail({ version: 'v1', auth });
+		
+		// List unread messages
+		const listResponse = await gmail.users.messages.list({
+			userId: 'me',
+			q: 'is:unread',
+			maxResults: maxResults,
+		});
+		
+		const messages = listResponse.data.messages || [];
+		
+		if (messages.length === 0) {
+			console.log('[GmailService] No unread emails found');
+			return [];
+		}
+		
+		console.log(`[GmailService] Found ${messages.length} unread emails, fetching details...`);
+		
+		// Fetch details for each message
+		const emails: UnreadEmail[] = [];
+		for (const message of messages) {
+			if (!message.id) continue;
+			
+			const messageResponse = await gmail.users.messages.get({
+				userId: 'me',
+				id: message.id,
+				format: 'full',
+			});
+			
+			const headers = messageResponse.data.payload?.headers || [];
+			const from = headers.find(h => h.name?.toLowerCase() === 'from')?.value || 'Unknown';
+			const subject = headers.find(h => h.name?.toLowerCase() === 'subject')?.value || '(No Subject)';
+			const date = headers.find(h => h.name?.toLowerCase() === 'date')?.value || '';
+			const snippet = messageResponse.data.snippet || '';
+			
+			emails.push({
+				id: message.id,
+				from,
+				subject,
+				snippet,
+				date,
+			});
+		}
+		
+		console.log(`[GmailService] Successfully fetched ${emails.length} emails`);
+		return emails;
+	} catch (error) {
+		console.error('[GmailService] Error fetching unread emails:', error);
+		throw error;
 	}
 }

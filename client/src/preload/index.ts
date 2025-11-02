@@ -8,6 +8,7 @@ export interface AutocompleteResponse {
   success: boolean;
   error?: string;
   isEmailTask?: boolean;
+  isSimpleDraft?: boolean;
 }
 
 export interface ProgressUpdate {
@@ -41,6 +42,14 @@ contextBridge.exposeInMainWorld('electron', {
   createGmailDraft: (draftContent: string): Promise<{ success: boolean; draftId?: string; error?: string }> => {
     console.log('[Preload] createGmailDraft called');
     return ipcRenderer.invoke('create-gmail-draft', draftContent);
+  },
+  fetchUnreadEmails: (maxResults: number = 5): Promise<{ success: boolean; emails: Array<{ id: string; from: string; subject: string; snippet: string; date: string }>; error?: string }> => {
+    console.log('[Preload] fetchUnreadEmails called');
+    return ipcRenderer.invoke('fetch-unread-emails', maxResults);
+  },
+  generateEmailAction: (emailContext: { subject?: string; snippet?: string; from?: string }): Promise<{ success: boolean; action?: string; error?: string }> => {
+    console.log('[Preload] generateEmailAction called');
+    return ipcRenderer.invoke('generate-email-action', emailContext);
   }
 })
 

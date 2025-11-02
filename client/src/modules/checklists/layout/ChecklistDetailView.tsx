@@ -39,6 +39,7 @@ export function ChecklistDetailView({
   const [bulkAddText, setBulkAddText] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  const [fetchingEmails, setFetchingEmails] = useState(false);
 
   if (!checklist) {
     return (
@@ -66,7 +67,18 @@ export function ChecklistDetailView({
     setTogglingIndex(index);
     try {
       const updatedItems = [...checklist.items];
-      updatedItems[index] = { ...updatedItems[index], completed: !updatedItems[index].completed };
+      const item = updatedItems[index];
+      const newCompletedState = !item.completed;
+      
+      // Toggle completion
+      updatedItems[index] = { ...item, completed: newCompletedState };
+      
+      // If marking as completed, move to bottom
+      if (newCompletedState) {
+        const [completedItem] = updatedItems.splice(index, 1);
+        updatedItems.push(completedItem);
+      }
+      
       await updateChecklist(checklist.id, { items: updatedItems });
       onUpdated();
     } catch (err) {
@@ -211,12 +223,14 @@ export function ChecklistDetailView({
 
   const handleSetDraft = async (index: number, draft: string | null, isEmailTask?: boolean) => {
     try {
+      console.log('[ChecklistDetailView] handleSetDraft called - index:', index, 'draft length:', draft?.length, 'isEmailTask:', isEmailTask);
       const updatedItems = [...checklist.items];
       updatedItems[index] = { 
         ...updatedItems[index], 
         draft,
         ...(isEmailTask !== undefined && { isEmailTask })
       };
+      console.log('[ChecklistDetailView] Updated item:', { draft: updatedItems[index].draft?.substring(0, 100), isEmailTask: updatedItems[index].isEmailTask });
       await updateChecklist(checklist.id, { items: updatedItems });
       onUpdated();
     } catch (err) {
@@ -225,10 +239,16 @@ export function ChecklistDetailView({
     }
   };
 
-  const handleSetSteps = async (index: number, steps: Array<{ content: string; timestamp: string }>) => {
+  const handleSetSteps = async (index: number, steps: Array<{ content: string; timestamp: string }>, isEmailTask?: boolean) => {
     try {
+      console.log('[ChecklistDetailView] handleSetSteps called - index:', index, 'steps.length:', steps.length, 'isEmailTask:', isEmailTask);
       const updatedItems = [...checklist.items];
-      updatedItems[index] = { ...updatedItems[index], steps };
+      updatedItems[index] = { 
+        ...updatedItems[index], 
+        steps,
+        ...(isEmailTask !== undefined && { isEmailTask })
+      };
+      console.log('[ChecklistDetailView] Updated item steps:', steps.map(s => s.content.substring(0, 50)));
       await updateChecklist(checklist.id, { items: updatedItems });
       onUpdated();
     } catch (err) {
@@ -252,6 +272,105 @@ export function ChecklistDetailView({
     } catch (err) {
       console.error(err);
       onShowToast('Failed to update work type');
+    }
+  };
+
+  const handleFetchEmailsAsItems = async () => {
+    if (!window.electron?.fetchUnreadEmails) {
+      onShowToast('Email functionality not available');
+      return;
+    }
+
+    setFetchingEmails(true);
+    try {
+      const result = await window.electron.fetchUnreadEmails(5);
+      
+      if (!result.success) {
+        onShowToast(result.error || 'Failed to fetch emails');
+        return;
+      }
+
+      if (result.emails.length === 0) {
+        onShowToast('No unread emails found');
+        return;
+      }
+
+      const fallbackAction = (subject: string, snippet: string) => {
+        const lowerSubject = subject.toLowerCase();
+        const lowerSnippet = snippet.toLowerCase();
+
+        if (lowerSubject.includes('meeting') || lowerSubject.includes('call') || lowerSubject.includes('schedule')) {
+          return 'Confirm availability for the requested meeting';
+        } else if (lowerSubject.includes('question') || lowerSnippet.includes('?') || lowerSubject.includes('help')) {
+          return 'Answer the sender’s questions and provide the requested information';
+        } else if (lowerSubject.includes('review') || lowerSubject.includes('feedback') || lowerSubject.includes('approval')) {
+          return 'Review the material and send feedback or approval';
+        } else if (lowerSubject.includes('invoice') || lowerSubject.includes('payment') || lowerSubject.includes('bill')) {
+          return 'Handle the payment or invoice mentioned in the email';
+        } else if (lowerSubject.includes('urgent') || lowerSubject.includes('asap') || lowerSubject.includes('important')) {
+          return 'Address the urgent request immediately';
+        } else if (lowerSubject.includes('thank') || lowerSubject.includes('appreciation')) {
+          return 'Acknowledge the email and respond with appreciation';
+        } else if (lowerSubject.includes('invitation') || lowerSubject.includes('invite')) {
+          return 'Respond to the invitation and confirm attendance';
+        } else if (lowerSubject.includes('document') || lowerSubject.includes('file') || lowerSubject.includes('attachment')) {
+          return 'Review the attached documents and respond';
+        } else if (lowerSubject.includes('deadline') || lowerSubject.includes('due') || lowerSubject.includes('reminder')) {
+          return 'Update the sender on progress toward the mentioned deadline';
+        }
+
+        return 'Respond to the sender and address the topics raised';
+      };
+
+      const actions = await Promise.all(
+        result.emails.map(async (email) => {
+          try {
+            if (!window.electron?.generateEmailAction) {
+              throw new Error('generateEmailAction bridge not available');
+            }
+
+            const response = await window.electron.generateEmailAction({
+              subject: email.subject,
+              snippet: email.snippet,
+              from: email.from,
+            });
+
+            if (response.success && response.action) {
+              return response.action.trim() || fallbackAction(email.subject, email.snippet);
+            }
+
+            return fallbackAction(email.subject, email.snippet);
+          } catch (err) {
+            console.error('Failed to generate email action via Claude:', err);
+            return fallbackAction(email.subject, email.snippet);
+          }
+        })
+      );
+
+      // Create checklist items from emails with Claude-generated response suggestions
+      const newItems: ChecklistItemType[] = result.emails.map((email, index) => {
+        // Extract email address from "Name <email@domain.com>" format
+        const emailMatch = email.from.match(/<([^>]+)>/) || email.from.match(/([^\s]+@[^\s]+)/);
+        const emailAddress = emailMatch ? emailMatch[1] : email.from;
+
+        const actionText = actions[index] || fallbackAction(email.subject, email.snippet);
+
+        return {
+          text: `Draft email response to ${emailAddress} with the content addressing: ${actionText}`,
+          completed: false,
+        };
+      });
+
+      // Add the new items to the checklist
+      const updatedItems = [...checklist.items, ...newItems];
+      await updateChecklist(checklist.id, { items: updatedItems });
+      onUpdated();
+      onShowToast(`Added ${newItems.length} email${newItems.length > 1 ? 's' : ''} as items`);
+    } catch (err) {
+      console.error('Error fetching emails:', err);
+      onShowToast('Failed to fetch emails');
+    } finally {
+      setFetchingEmails(false);
     }
   };
 
@@ -349,7 +468,18 @@ export function ChecklistDetailView({
               </h1>
             )}
             
-            <div style={{ display: 'flex', margin: '0 8px', flexShrink: 0 }}>
+            <div style={{ display: 'flex', gap: '8px', margin: '0 8px', flexShrink: 0 }}>
+              <button
+                id="btn-fetch-emails"
+                type="button"
+                className="btn primary"
+                onClick={handleFetchEmailsAsItems}
+                disabled={fetchingEmails}
+                style={{ padding: '12px 16px' }}
+                title="Fetch 5 most recent unread emails and add them as checklist items"
+              >
+                {fetchingEmails ? '📧 Fetching...' : '📧 Fetch Emails'}
+              </button>
               <button
                 id="btn-delete-checklist"
                 type="button"

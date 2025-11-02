@@ -14,7 +14,7 @@ type Props = {
   onDelete: (index: number) => void;
   onUpdate: (index: number, newText: string) => void;
   onSetDraft: (index: number, draft: string | null, isEmailTask?: boolean) => void;
-  onSetSteps: (index: number, steps: Array<{ content: string; timestamp: string }>) => void;
+  onSetSteps: (index: number, steps: Array<{ content: string; timestamp: string }>, isEmailTask?: boolean) => void;
   onMoveItem: (fromIndex: number, toIndex: number) => void;
   onSetWorkType: (index: number, type: 'email' | 'coding' | 'calendar', value: boolean) => void;
   disabled?: boolean;
@@ -59,6 +59,11 @@ export function DraggableChecklistItem({
   const isDragging = draggedIndex === index;
   const showDropZoneAbove = dropTargetIndex === index;
   const showDropZoneBelow = dropTargetIndex === index + 1;
+
+  // Log when draft or steps change
+  useEffect(() => {
+    console.log('[Component] Item state changed - index:', index, 'hasDraft:', !!item.draft, 'draftLength:', item.draft?.length, 'stepsCount:', item.steps?.length, 'isEmailTask:', item.isEmailTask);
+  }, [item.draft, item.steps, item.isEmailTask, index]);
 
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.effectAllowed = 'move';
@@ -140,8 +145,15 @@ export function DraggableChecklistItem({
   };
 
   const handleApproveDraft = async () => {
-    if (!item.draft || !item.isEmailTask) {
-      console.log(`[ChecklistItem] Approved non-email draft for checklist item ${index}`);
+    // Get draft content from steps[0] if available, otherwise use old draft field
+    const draftContent = (item.steps && item.steps.length === 1) 
+      ? item.steps[0].content 
+      : item.draft;
+    
+    console.log('[ChecklistItem] handleApproveDraft - draftContent:', !!draftContent, 'length:', draftContent?.length, 'isEmailTask:', item.isEmailTask, 'item.steps?.length:', item.steps?.length);
+    
+    if (!draftContent || !item.isEmailTask) {
+      console.log(`[ChecklistItem] Approved non-email draft for checklist item ${index} - draftContent: ${!!draftContent}, isEmailTask: ${item.isEmailTask}`);
       return;
     }
 
@@ -159,15 +171,14 @@ export function DraggableChecklistItem({
     setAutocompleteError(null);
 
     try {
-      const result = await window.electron.createGmailDraft(item.draft);
+      const result = await window.electron.createGmailDraft(draftContent);
       if (result.success) {
         console.log('[ChecklistItem] Gmail draft created successfully:', result.draftId);
         // Show friendly success message even if no draftId is provided
         setAutocompleteError(null);
         setSuccessMessage(result.message || 'Success! Please check your drafts');
         setTimeout(() => setSuccessMessage(null), 5000);
-        // Clear the draft and steps after successful creation
-        onSetDraft(index, null);
+        // Clear the steps after successful creation
         onSetSteps(index, []);
       } else {
         setSuccessMessage(null);
@@ -201,17 +212,31 @@ export function DraggableChecklistItem({
   const handleStartDraftEdit = () => {
     if (disabled) return;
     setIsEditingDraft(true);
-    setEditDraftText(item.draft || '');
+    // Get text from steps[0] if available, otherwise fall back to draft field
+    const text = (item.steps && item.steps.length === 1) 
+      ? item.steps[0].content 
+      : (item.draft || '');
+    setEditDraftText(text);
   };
 
   const handleSaveDraft = () => {
     const next = editDraftText.trim();
-    onSetDraft(index, next || null);
+    if (item.steps && item.steps.length === 1) {
+      // Update steps[0].content for single-step responses
+      const updatedSteps = [{ content: next, timestamp: new Date().toISOString() }];
+      onSetSteps(index, next ? updatedSteps : []);
+    } else {
+      // Fall back to old draft field for backward compatibility
+      onSetDraft(index, next || null);
+    }
     setIsEditingDraft(false);
   };
 
   const handleCancelDraft = () => {
-    setEditDraftText(item.draft || '');
+    const text = (item.steps && item.steps.length === 1) 
+      ? item.steps[0].content 
+      : (item.draft || '');
+    setEditDraftText(text);
     setIsEditingDraft(false);
   };
 
@@ -245,9 +270,8 @@ export function DraggableChecklistItem({
         } else if (update.type === 'step' && update.content) {
           setProgressSteps(prev => {
             const newSteps = [...prev, { content: update.content!, timestamp: update.timestamp }];
-            // Show progress steps in real-time during processing
-            // These will be cleared when complete for email tasks
-            onSetSteps(index, newSteps);
+            // Just track progress locally - don't save to database until complete
+            // The completion handler will save the final steps with isEmailTask
             return newSteps;
           });
         } else if (update.type === 'error') {
@@ -306,17 +330,11 @@ export function DraggableChecklistItem({
       console.log('[Component] Autocomplete response:', response);
       
       if (response.success) {
-        // For email tasks, extract the draft content from steps and show in AutocompleteDraft
-        if (response.isEmailTask && response.steps && response.steps.length > 0) {
-          // Combine all steps into a single draft
-          const draftContent = response.steps.map(s => s.content).join('\n\n');
-          onSetDraft(index, draftContent, true);
-          // Clear steps for email tasks - draft will be shown in AutocompleteDraft instead
-          onSetSteps(index, []);
-        } else {
-          // For non-email tasks, show steps in AgentSteps
-          onSetSteps(index, response.steps || []);
-        }
+        console.log('[Component] Response details - isSimpleDraft:', response.isSimpleDraft, 'steps.length:', response.steps?.length, 'isEmailTask:', response.isEmailTask);
+        
+        // Always store steps - let rendering logic decide how to display them
+        // Single atomic update for reliability - no data transformation, no multiple async calls
+        onSetSteps(index, response.steps || [], response.isEmailTask);
       } else {
         setSuccessMessage(null);
         setAutocompleteError(response.error || 'Autocomplete failed');
@@ -578,11 +596,12 @@ export function DraggableChecklistItem({
           />
         )}
 
-        {item.draft && !isEditingDraft && (
+        {/* Render steps as draft or agent steps based on structure */}
+        {item.steps && item.steps.length === 1 && !isEditingDraft && (
           <div style={{ marginLeft: '34px', cursor: disabled ? 'default' : 'text' }} title={disabled ? undefined : 'Click to edit draft'}>
             <AutocompleteDraft
-              text={item.draft}
-              onDelete={handleDeleteDraft}
+              text={item.steps[0].content}
+              onDelete={handleDeleteSteps}
               onRetry={handleRetryDraft}
               onApprove={handleApproveDraft}
               onEdit={handleStartDraftEdit}
@@ -593,7 +612,7 @@ export function DraggableChecklistItem({
           </div>
         )}
 
-        {isEditingDraft && (
+        {item.steps && item.steps.length === 1 && isEditingDraft && (
           <div style={{ marginLeft: '34px' }}>
             <textarea
               value={editDraftText}
@@ -618,7 +637,7 @@ export function DraggableChecklistItem({
           </div>
         )}
 
-        {item.steps && item.steps.length > 0 && (
+        {item.steps && item.steps.length > 1 && (
           <div style={{ marginLeft: '34px' }}>
             <AgentSteps
               steps={item.steps}
@@ -628,6 +647,22 @@ export function DraggableChecklistItem({
               onUpdateStep={handleUpdateStep}
               disabled={disabled}
               isProcessing={isAutocompleting}
+            />
+          </div>
+        )}
+        
+        {/* Keep old draft field support for backward compatibility */}
+        {item.draft && !item.steps && !isEditingDraft && (
+          <div style={{ marginLeft: '34px', cursor: disabled ? 'default' : 'text' }} title={disabled ? undefined : 'Click to edit draft'}>
+            <AutocompleteDraft
+              text={item.draft}
+              onDelete={handleDeleteDraft}
+              onRetry={handleRetryDraft}
+              onApprove={handleApproveDraft}
+              onEdit={handleStartDraftEdit}
+              disabled={disabled || isApproving}
+              isProcessing={isAutocompleting}
+              isApproving={isApproving}
             />
           </div>
         )}
