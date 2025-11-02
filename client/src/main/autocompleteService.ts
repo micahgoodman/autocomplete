@@ -4,6 +4,8 @@ import {
 	type SDKResultMessage,
 } from '@anthropic-ai/claude-agent-sdk';
 import path from 'path';
+import { getAllTools, executeTool } from './claudeTools';
+import { checkGmailAuth } from './gmailService';
 
 export interface AutocompleteRequest {
 	taskText: string;
@@ -106,47 +108,34 @@ export class AutocompleteService {
 			if (onProgress) {
 				onProgress({
 					type: 'status',
-					message: needsGmail ? 'Preparing email draft with Google Workspace MCP...' : 'Processing task...',
+					message: needsGmail ? 'Preparing email draft with Gmail API...' : 'Processing task...',
 					timestamp: new Date().toISOString(),
 				});
 			}
 
-			// Build the prompt for email tasks to use the MCP server tools directly
+			// Check Gmail authentication if needed
+			if (needsGmail && !checkGmailAuth()) {
+				console.error('[AutocompleteService] Google OAuth credentials not found');
+				throw new Error('Google OAuth credentials not configured. Please set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_OAUTH_CLIENT_SECRET environment variables.');
+			}
+
+			// Build the prompt for email tasks to use the gmail_create_draft tool
 			const prompt = needsGmail
-				? `Create a Gmail draft for this task using the gmail_draft tool from the Google Workspace MCP server.\n\nTask: ${taskText}\n\nUse the gmail_draft tool to create the draft. Extract the recipient email, subject, and body from the task description. Make sure to call the tool with proper parameters.`
+				? `Create a Gmail draft for this task using the gmail_create_draft tool.\n\nTask: ${taskText}\n\nExtract the recipient email (to), subject, and body from the task description. Then use the gmail_create_draft tool to create the draft in Gmail.`
 				: `Complete this task. Show your work in steps if needed.\n\nTask: ${taskText}\n\nProvide your output directly. For code or documents, provide the complete content. For complex tasks, you can break it down into steps.`;
 
 			let queryOptions: any = {
 				model: 'claude-haiku-4-5',
 				includePartialMessages: false,
-				permissionMode: 'bypassPermissions', // Auto-approve all tool uses including MCP tools
+				permissionMode: 'bypassPermissions', // Auto-approve all tool uses
 			};
 
-			// Configure Workspace MCP server for email tasks
+			// Add custom Gmail tools for email tasks
 			if (needsGmail) {
-				const oauthClientId = process.env.VITE_GOOGLE_OAUTH_CLIENT_ID?.trim();
-				const oauthClientSecret = process.env.VITE_GOOGLE_OAUTH_CLIENT_SECRET?.trim();
-				
-				if (!oauthClientId || !oauthClientSecret) {
-					console.error('[AutocompleteService] Google OAuth credentials not found');
-					throw new Error('Google OAuth credentials not configured. Please set VITE_GOOGLE_OAUTH_CLIENT_ID and VITE_GOOGLE_OAUTH_CLIENT_SECRET environment variables.');
-				}
-
-				// Configure the Workspace MCP server
-				queryOptions.mcpServers = {
-					google_workspace: {
-						type: 'stdio' as const,
-						command: 'uvx',
-						args: ['workspace-mcp', '--tool-tier', 'core'],
-						env: {
-							GOOGLE_OAUTH_CLIENT_ID: oauthClientId,
-							GOOGLE_OAUTH_CLIENT_SECRET: oauthClientSecret,
-							OAUTHLIB_INSECURE_TRANSPORT: '1',
-						},
-					},
-				};
-				
-				console.log('[AutocompleteService] Configured Workspace MCP server for Gmail tools');
+				const tools = getAllTools();
+				queryOptions.tools = tools;
+				console.log('[AutocompleteService] Registered custom Gmail tools:', JSON.stringify(tools, null, 2));
+				console.log('[AutocompleteService] Query options:', JSON.stringify(queryOptions, null, 2));
 			}
 
 			const stream = query({
@@ -179,6 +168,39 @@ export class AutocompleteService {
 					// Check for error messages
 					if ((message as any).error) {
 						console.error('[AutocompleteService] Error in message:', (message as any).error);
+					}
+
+					// Handle tool use requests from Claude
+					if (message.type === 'assistant' && needsGmail) {
+						const msg = (message as any).message;
+						if (msg?.content && Array.isArray(msg.content)) {
+							for (const block of msg.content) {
+								if (block.type === 'tool_use') {
+									console.log('[AutocompleteService] Claude wants to use tool:', block.name);
+									
+									// Execute the tool
+									const toolResult = await executeTool(block.name, block.input);
+									console.log('[AutocompleteService] Tool execution result:', toolResult);
+									
+									// Add tool result as a step
+									if (toolResult.success && toolResult.content) {
+										const timestamp = new Date().toISOString();
+										steps.push({
+											content: toolResult.content,
+											timestamp,
+										});
+										
+										if (onProgress) {
+											onProgress({
+												type: 'step',
+												content: toolResult.content,
+												timestamp,
+											});
+										}
+									}
+								}
+							}
+						}
 					}
 
 					// Collect all assistant messages as steps

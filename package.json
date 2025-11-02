@@ -8,9 +8,9 @@
     "build": "npm --prefix client install && npm --prefix client run build"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.4"
+    "@supabase/supabase-js": "2.45.4"
   },
   "devDependencies": {
-    "typescript": "^5.5.4"
+    "typescript": "5.5.4"
   }
 }

@@ -245,7 +245,8 @@ export function DraggableChecklistItem({
         } else if (update.type === 'step' && update.content) {
           setProgressSteps(prev => {
             const newSteps = [...prev, { content: update.content!, timestamp: update.timestamp }];
-            // Update the parent component with the new steps
+            // Show progress steps in real-time during processing
+            // These will be cleared when complete for email tasks
             onSetSteps(index, newSteps);
             return newSteps;
           });
@@ -310,8 +311,10 @@ export function DraggableChecklistItem({
           // Combine all steps into a single draft
           const draftContent = response.steps.map(s => s.content).join('\n\n');
           onSetDraft(index, draftContent, true);
+          // Clear steps for email tasks - draft will be shown in AutocompleteDraft instead
+          onSetSteps(index, []);
         } else {
-          // For non-email tasks, show steps as before
+          // For non-email tasks, show steps in AgentSteps
           onSetSteps(index, response.steps || []);
         }
       } else {
