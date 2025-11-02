@@ -4,6 +4,7 @@ import { ModuleGrid } from './ui/generic/ModuleGrid';
 import { ConfirmModal } from './modules/ConfirmModal';
 // Register association resolvers (each module registers its own)
 import './modules/checklists/registerAssociations';
+import './modules/notes/registerAssociations';
 
 // Create context for auth modal control
 interface AuthContextType {

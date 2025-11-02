@@ -1,4 +1,5 @@
 import { ChecklistManager } from '../../modules/checklists/ChecklistManagerModule';
+import { NoteManager } from '../../modules/notes/NoteManagerModule';
 import { ViewMode } from '../../modules/Header';
 
 type Props = {
@@ -19,6 +20,9 @@ export function ModuleGrid({ hideEmbedded = false, viewMode }: Props) {
   return (
     <section style={{ marginTop: 24 }}>
       <ChecklistManager hideEmbedded={hideEmbedded} viewMode={viewMode} />
+      <div style={{ marginTop: 48 }}>
+        <NoteManager hideEmbedded={hideEmbedded} viewMode={viewMode} />
+      </div>
     </section>
   );
 }
