@@ -4,15 +4,13 @@ import { Note } from '../../api';
 import { NoteAdapter } from '../../adapters/notes/adapter';
 import { CreateNoteModal } from './create/CreateNoteModal';
 import { NoteLayout } from './layout/NoteLayout';
-import { ViewMode } from '../Header';
 import { useNoteSelection } from './hooks/useNoteSelection';
 
 type Props = {
   hideEmbedded?: boolean;
-  viewMode: ViewMode;
 };
 
-export function NoteManager({ hideEmbedded = false, viewMode }: Props) {
+export function NoteManager({ hideEmbedded = false }: Props) {
   const [toast, setToast] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -69,7 +67,6 @@ export function NoteManager({ hideEmbedded = false, viewMode }: Props) {
             }}
             onShowToast={showToast}
             hideEmbedded={hideEmbedded}
-            viewMode={viewMode}
           />
         )}
       </div>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Checklist } from '../../../api';
+import { Checklist, Note } from '../../../api';
 import { ChecklistSidebar } from './ChecklistSidebar';
 import { ChecklistDetailView } from './ChecklistDetailView';
 import { WhiteboardView } from './WhiteboardView';
@@ -8,10 +8,14 @@ import { ViewMode } from '../../Header';
 
 type Props = {
   checklists: Checklist[];
+  notes: Note[];
   selectedId: string | null;
+  selectedType: 'checklist' | 'note' | null;
   selectedChecklist: Checklist | null;
-  onSelect: (id: string) => void;
-  onAddNew: () => void;
+  selectedNote: Note | null;
+  onSelect: (id: string, type: 'checklist' | 'note') => void;
+  onAddNewChecklist: () => void;
+  onAddNewNote: () => void;
   onUpdated: () => void;
   onDeleted: () => void;
   onShowToast: (message: string) => void;
@@ -22,10 +26,14 @@ type Props = {
 
 export function ChecklistLayout({
   checklists,
+  notes,
   selectedId,
+  selectedType,
   selectedChecklist,
+  selectedNote,
   onSelect,
-  onAddNew,
+  onAddNewChecklist,
+  onAddNewNote,
   onUpdated,
   onDeleted,
   onShowToast,
@@ -48,8 +56,8 @@ export function ChecklistLayout({
           <ChecklistSidebar
             checklists={checklists}
             selectedId={selectedId}
-            onSelect={onSelect}
-            onAddNew={onAddNew}
+            onSelect={(id) => onSelect(id, 'checklist')}
+            onAddNew={onAddNewChecklist}
           />
           
           <ChecklistDetailView
@@ -64,10 +72,14 @@ export function ChecklistLayout({
       ) : (
         <WhiteboardView
           checklists={checklists}
+          notes={notes}
           selectedId={selectedId}
+          selectedType={selectedType}
           selectedChecklist={selectedChecklist}
+          selectedNote={selectedNote}
           onSelect={onSelect}
-          onAddNew={onAddNew}
+          onAddNewChecklist={onAddNewChecklist}
+          onAddNewNote={onAddNewNote}
           onUpdated={onUpdated}
           onDeleted={onDeleted}
           onShowToast={onShowToast}
