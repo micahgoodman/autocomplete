@@ -2,6 +2,8 @@ import React from 'react';
 import { Checklist, Note } from '../../../api';
 import { ChecklistSidebar } from './ChecklistSidebar';
 import { ChecklistDetailView } from './ChecklistDetailView';
+import { NoteSidebar } from '../../notes/layout/NoteSidebar';
+import { NoteDetailView } from '../../notes/layout/NoteDetailView';
 import { WhiteboardView } from './WhiteboardView';
 import { Context } from '../../../adapters/core';
 import { ViewMode } from '../../Header';
@@ -45,29 +47,58 @@ export function ChecklistLayout({
     <>
       {/* Content based on view mode */}
       {viewMode === 'sidebar' ? (
-        <div style={{
-          display: 'flex',
-          height: 'calc(100vh - 80px)',
-          backgroundColor: '#fefdfb',
-          border: '1px solid #e8e4df',
-          borderRadius: '16px',
-          overflow: 'hidden',
-        }}>
-          <ChecklistSidebar
-            checklists={checklists}
-            selectedId={selectedId}
-            onSelect={(id) => onSelect(id, 'checklist')}
-            onAddNew={onAddNewChecklist}
-          />
-          
-          <ChecklistDetailView
-            checklist={selectedChecklist}
-            onUpdated={onUpdated}
-            onDeleted={onDeleted}
-            onShowToast={onShowToast}
-            contextChain={contextChain}
-            hideEmbedded={hideEmbedded}
-          />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {/* Checklists Section */}
+          <div style={{
+            display: 'flex',
+            height: '600px',
+            backgroundColor: '#fefdfb',
+            border: '1px solid #e8e4df',
+            borderRadius: '16px',
+            overflow: 'hidden',
+          }}>
+            <ChecklistSidebar
+              checklists={checklists}
+              selectedId={selectedType === 'checklist' ? selectedId : null}
+              onSelect={(id) => onSelect(id, 'checklist')}
+              onAddNew={onAddNewChecklist}
+            />
+            
+            <ChecklistDetailView
+              checklist={selectedChecklist}
+              onUpdated={onUpdated}
+              onDeleted={onDeleted}
+              onShowToast={onShowToast}
+              contextChain={contextChain}
+              hideEmbedded={hideEmbedded}
+            />
+          </div>
+
+          {/* Notes Section */}
+          <div style={{
+            display: 'flex',
+            height: '600px',
+            backgroundColor: '#fefdfb',
+            border: '1px solid #e8e4df',
+            borderRadius: '16px',
+            overflow: 'hidden',
+          }}>
+            <NoteSidebar
+              notes={notes}
+              selectedId={selectedType === 'note' ? selectedId : null}
+              onSelect={(id) => onSelect(id, 'note')}
+              onAddNew={onAddNewNote}
+            />
+            
+            <NoteDetailView
+              note={selectedNote}
+              onUpdated={onUpdated}
+              onDeleted={onDeleted}
+              onShowToast={onShowToast}
+              contextChain={contextChain}
+              hideEmbedded={hideEmbedded}
+            />
+          </div>
         </div>
       ) : (
         <WhiteboardView

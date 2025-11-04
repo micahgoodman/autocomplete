@@ -32,7 +32,12 @@ export const supabase = createClient(
   supabaseUrl ?? '',
   supabaseKey ?? '',
   {
-    auth: { persistSession: false },
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+    },
     // You can tweak realtime options here if needed
   }
 );

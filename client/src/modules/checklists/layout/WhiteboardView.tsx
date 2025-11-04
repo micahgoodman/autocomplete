@@ -63,39 +63,76 @@ export function WhiteboardView({
   const [frontCardId, setFrontCardId] = useState<string | null>(null);
   const dragStartPos = useRef<{ x: number; y: number } | null>(null);
   const isDraggingRef = useRef(false);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const prevChecklistIdsRef = useRef<Set<string>>(new Set(checklists.map(c => c.id)));
+  const prevNoteIdsRef = useRef<Set<string>>(new Set(notes.map(n => n.id)));
+
+  // Detect new items and auto-select them
+  useEffect(() => {
+    const currentChecklistIds = new Set(checklists.map(c => c.id));
+    const currentNoteIds = new Set(notes.map(n => n.id));
+    
+    // Check if a new checklist was added
+    const newChecklistId = Array.from(currentChecklistIds).find(id => !prevChecklistIdsRef.current.has(id));
+    if (newChecklistId) {
+      onSelect(newChecklistId, 'checklist');
+      setFrontCardId(newChecklistId);
+    }
+    // Check if a new note was added
+    else {
+      const newNoteId = Array.from(currentNoteIds).find(id => !prevNoteIdsRef.current.has(id));
+      if (newNoteId) {
+        onSelect(newNoteId, 'note');
+        setFrontCardId(newNoteId);
+      }
+    }
+    
+    // Update refs for next comparison
+    prevChecklistIdsRef.current = currentChecklistIds;
+    prevNoteIdsRef.current = currentNoteIds;
+  }, [checklists, notes, onSelect]);
 
   // Initialize positions for new checklists and notes
   useEffect(() => {
     const newPositions = new Map(positions);
     let needsUpdate = false;
-    let index = 0;
-
+    
+    // Get viewport dimensions to constrain positioning
+    const viewportWidth = canvasRef.current?.clientWidth || 1200;
+    const viewportHeight = canvasRef.current?.clientHeight || 800;
+    
+    // Calculate available space for random positioning
+    const maxX = viewportWidth - CARD_WIDTH - SPACING;
+    const maxY = viewportHeight - CARD_HEIGHT - SPACING;
+    
     // Add positions for new checklists
     checklists.forEach((checklist) => {
       if (!newPositions.has(checklist.id)) {
-        const col = index % 4;
-        const row = Math.floor(index / 4);
-        const x = SPACING + col * (CARD_WIDTH + SPACING);
-        const y = SPACING + row * (CARD_HEIGHT + SPACING);
+        // Generate random position within viewport bounds
+        const x = SPACING + Math.random() * Math.max(0, maxX - SPACING);
+        const y = SPACING + Math.random() * Math.max(0, maxY - SPACING);
         
-        newPositions.set(checklist.id, { x, y });
+        newPositions.set(checklist.id, { 
+          x: Math.max(SPACING, Math.min(x, maxX)), 
+          y: Math.max(SPACING, Math.min(y, maxY)) 
+        });
         needsUpdate = true;
       }
-      index++;
     });
 
     // Add positions for new notes
     notes.forEach((note) => {
       if (!newPositions.has(note.id)) {
-        const col = index % 4;
-        const row = Math.floor(index / 4);
-        const x = SPACING + col * (CARD_WIDTH + SPACING);
-        const y = SPACING + row * (CARD_HEIGHT + SPACING);
+        // Generate random position within viewport bounds
+        const x = SPACING + Math.random() * Math.max(0, maxX - SPACING);
+        const y = SPACING + Math.random() * Math.max(0, maxY - SPACING);
         
-        newPositions.set(note.id, { x, y });
+        newPositions.set(note.id, { 
+          x: Math.max(SPACING, Math.min(x, maxX)), 
+          y: Math.max(SPACING, Math.min(y, maxY)) 
+        });
         needsUpdate = true;
       }
-      index++;
     });
 
     // Remove positions for deleted items
@@ -271,6 +308,7 @@ export function WhiteboardView({
         </div>
 
         {/* Canvas */}
+        <div ref={canvasRef} style={{ flex: 1, overflow: 'hidden' }}>
         <DraggableCanvas showGrid gridSize={20}>
           {/* Render checklists */}
           {checklists.map((checklist) => {
@@ -340,6 +378,7 @@ export function WhiteboardView({
             );
           })}
         </DraggableCanvas>
+        </div>
 
         {/* Empty State */}
         {checklists.length === 0 && notes.length === 0 && (

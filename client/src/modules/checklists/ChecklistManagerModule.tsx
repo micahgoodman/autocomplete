@@ -9,6 +9,7 @@ import { ChecklistLayout } from './layout/ChecklistLayout';
 import { ViewMode } from '../Header';
 import { useChecklistSelection } from './hooks/useChecklistSelection';
 import { useNoteSelection } from '../notes/hooks/useNoteSelection';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Props = {
   hideEmbedded?: boolean;
@@ -16,6 +17,7 @@ type Props = {
 };
 
 export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
+  const { user, requestSignIn } = useAuth();
   const [toast, setToast] = useState<string | null>(null);
   const [showAddChecklistModal, setShowAddChecklistModal] = useState(false);
   const [showAddNoteModal, setShowAddNoteModal] = useState(false);
@@ -51,6 +53,22 @@ export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
     return checklistResult.success && noteResult.success ? { success: true } : { success: false, error: 'Failed to refresh' };
   };
 
+  const handleCreateNote = () => {
+    if (!user) {
+      requestSignIn();
+      return;
+    }
+    setShowAddNoteModal(true);
+  };
+
+  const handleCreateChecklist = () => {
+    if (!user) {
+      requestSignIn();
+      return;
+    }
+    setShowAddChecklistModal(true);
+  };
+
   return (
     <>
       <div style={{ padding: '0' }}>
@@ -72,7 +90,7 @@ export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
                 id="btn-add-note"
                 type="button"
                 className="btn primary"
-                onClick={() => setShowAddNoteModal(true)}
+                onClick={handleCreateNote}
                 style={{ padding: '16px 32px', fontSize: '16px' }}
               >
                 + Create Your First Note
@@ -81,7 +99,7 @@ export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
                 id="btn-add-checklist"
                 type="button"
                 className="btn primary"
-                onClick={() => setShowAddChecklistModal(true)}
+                onClick={handleCreateChecklist}
                 style={{ padding: '16px 32px', fontSize: '16px' }}
               >
                 + Create Your First Checklist
@@ -97,8 +115,8 @@ export function ChecklistManager({ hideEmbedded = false, viewMode }: Props) {
             selectedChecklist={selectedChecklist}
             selectedNote={selectedNote}
             onSelect={handleSelect}
-            onAddNewChecklist={() => setShowAddChecklistModal(true)}
-            onAddNewNote={() => setShowAddNoteModal(true)}
+            onAddNewChecklist={handleCreateChecklist}
+            onAddNewNote={handleCreateNote}
             onUpdated={() => {
               refresh();
               showToast('Saved');

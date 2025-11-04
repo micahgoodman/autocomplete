@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "dev": "npm --prefix client run dev",
-    "build": "npm --prefix client install && npm --prefix client run build"
+    "build": "npm --prefix client install && npm --prefix client run build",
+    "build:web": "npm --prefix client install && npm --prefix client run build:web"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.45.4"

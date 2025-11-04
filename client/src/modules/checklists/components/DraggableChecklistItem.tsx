@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChecklistItem as ChecklistItemType } from '../../../api';
-import { useAuth } from '../../../App';
+import { useAuth } from '../../../contexts/AuthContext';
 import type { ProgressUpdate } from '../../../electron';
 
 import { AutocompleteDraft } from './AutocompleteDraft';

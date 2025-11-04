@@ -5,12 +5,14 @@ import { NoteAdapter } from '../../adapters/notes/adapter';
 import { CreateNoteModal } from './create/CreateNoteModal';
 import { NoteLayout } from './layout/NoteLayout';
 import { useNoteSelection } from './hooks/useNoteSelection';
+import { useAuth } from '../../contexts/AuthContext';
 
 type Props = {
   hideEmbedded?: boolean;
 };
 
 export function NoteManager({ hideEmbedded = false }: Props) {
+  const { user, requestSignIn } = useAuth();
   const [toast, setToast] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -23,6 +25,14 @@ export function NoteManager({ hideEmbedded = false }: Props) {
   const { items: notes, refresh } = useModuleList<Note>(NoteAdapter);
 
   const { selectedId, selectedNote, selectNote } = useNoteSelection(notes);
+
+  const handleCreateNote = () => {
+    if (!user) {
+      requestSignIn();
+      return;
+    }
+    setShowAddModal(true);
+  };
 
   return (
     <>
@@ -44,7 +54,7 @@ export function NoteManager({ hideEmbedded = false }: Props) {
               id="btn-add-note"
               type="button"
               className="btn primary"
-              onClick={() => setShowAddModal(true)}
+              onClick={handleCreateNote}
               style={{ padding: '16px 32px', fontSize: '16px' }}
             >
               + Create Your First Note
@@ -56,7 +66,7 @@ export function NoteManager({ hideEmbedded = false }: Props) {
             selectedId={selectedId}
             selectedNote={selectedNote}
             onSelect={selectNote}
-            onAddNew={() => setShowAddModal(true)}
+            onAddNew={handleCreateNote}
             onUpdated={() => {
               refresh();
               showToast('Saved');

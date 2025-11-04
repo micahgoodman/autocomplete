@@ -1,4 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { AuthModal } from '../components/auth/AuthModal';
+import { ProfileModal } from '../components/auth/ProfileModal';
 
 export type ViewMode = 'sidebar' | 'whiteboard';
 
@@ -8,6 +11,10 @@ type Props = {
 };
 
 export function Header({ viewMode, onViewModeChange }: Props) {
+  const { user, loading } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
   return (
     <header>
       <div className="container">
@@ -17,8 +24,9 @@ export function Header({ viewMode, onViewModeChange }: Props) {
             <h1>Autocomplete</h1>
           </div>
           
-          {/* View Mode Toggle */}
-          {viewMode && onViewModeChange && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            {/* View Mode Toggle */}
+            {viewMode && onViewModeChange && (
             <div style={{
               display: 'inline-flex',
               backgroundColor: '#f9f7f4',
@@ -62,8 +70,72 @@ export function Header({ viewMode, onViewModeChange }: Props) {
               </button>
             </div>
           )}
+          
+          {/* Auth UI */}
+          {!loading && (
+            <div>
+              {user ? (
+                <button
+                  type="button"
+                  onClick={() => setShowProfileModal(true)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    border: '1px solid #e8e4df',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    backgroundColor: '#f9f7f4',
+                    color: '#6b5d52',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f0ede8';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#f9f7f4';
+                  }}
+                >
+                  <span style={{ fontSize: '18px' }}>👤</span>
+                  <span>{user.email}</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowAuthModal(true)}
+                  style={{
+                    padding: '8px 16px',
+                    fontSize: '14px',
+                    fontWeight: 500,
+                    border: 'none',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    backgroundColor: '#bc915c',
+                    color: '#fefdfb',
+                    transition: 'all 0.2s ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = '#a57e4d';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = '#bc915c';
+                  }}
+                >
+                  Sign In
+                </button>
+              )}
+            </div>
+          )}
+          </div>
         </div>
       </div>
+      
+      {/* Auth Modals */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+      {showProfileModal && <ProfileModal onClose={() => setShowProfileModal(false)} />}
     </header>
   );
 }

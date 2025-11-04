@@ -1,3 +1,5 @@
+import { supabase } from './supabaseClient';
+
 const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 function url(path: string) {
@@ -10,13 +12,19 @@ function isSupabaseUrl(base: string): boolean {
   return /\.supabase\.co\//.test(base) || /127\.0\.0\.1|localhost/.test(base);
 }
 
-function buildHeaders(extra?: HeadersInit): HeadersInit {
+async function buildHeaders(extra?: HeadersInit): Promise<HeadersInit> {
   const headers: Record<string, string> = {};
+  
   // Include Supabase auth headers when targeting Edge Functions
-  if (isSupabaseUrl(API_BASE) && SUPABASE_ANON_KEY) {
+  if (isSupabaseUrl(API_BASE)) {
+    // Try to get the current session token
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || SUPABASE_ANON_KEY;
+    
     headers['apikey'] = SUPABASE_ANON_KEY;
-    headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
+    headers['Authorization'] = `Bearer ${token}`;
   }
+  
   if (extra) {
     // Merge provided headers (object only, minimal implementation)
     const e = extra as Record<string, string>;
@@ -47,14 +55,14 @@ async function json<T>(res: Response): Promise<T> {
 // Generic fetch by identity_key across all contexts for any module type
 export async function fetchByIdentity<T = any>(filter: string, identityKey: string): Promise<T[]> {
   const params = new URLSearchParams({ filter, identityKey });
-  return fetch(url(`/concepts?${params.toString()}`), { headers: buildHeaders() }).then(res => json<T[]>(res));
+  return fetch(url(`/concepts?${params.toString()}`), { headers: await buildHeaders() }).then(res => json<T[]>(res));
 }
 
 // Generic association API
 export async function associateModule(body: { parentType: string; parentId: string; childType: string; childId: string }) {
   return fetch(url('/concepts?action=associate'), {
     method: 'POST',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   }).then(res => json<{ ok: boolean }>(res));
 }
@@ -62,7 +70,7 @@ export async function associateModule(body: { parentType: string; parentId: stri
 export async function disassociateModule(body: { parentType: string; parentId: string; childType: string; childId: string }) {
   return fetch(url('/concepts?action=disassociate'), {
     method: 'POST',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body),
   }).then(res => json<{ ok: boolean }>(res));
 }
@@ -70,7 +78,7 @@ export async function disassociateModule(body: { parentType: string; parentId: s
 // Fetch parents that reference a child in their sub_modules
 export async function fetchParentsOf(childType: string, childId: string): Promise<Array<{ id: string; type: string; title?: string }>> {
   const params = new URLSearchParams({ childType, childId, parentsOnly: 'true' });
-  return fetch(url(`/concepts?${params.toString()}`), { headers: buildHeaders() }).then(res => json<Array<{ id: string; type: string; title?: string }>>(res));
+  return fetch(url(`/concepts?${params.toString()}`), { headers: await buildHeaders() }).then(res => json<Array<{ id: string; type: string; title?: string }>>(res));
 }
 
 /**
@@ -107,17 +115,17 @@ export type Checklist = {
 };
 
 export async function fetchChecklists(): Promise<Checklist[]> {
-  return fetch(url('/concepts?filter=checklist'), { headers: buildHeaders() }).then(res => json<Checklist[]>(res));
+  return fetch(url('/concepts?filter=checklist'), { headers: await buildHeaders() }).then(res => json<Checklist[]>(res));
 }
 
 export async function fetchChecklistsByContext(contextType: string, contextId: string): Promise<Checklist[]> {
-  return fetch(url(`/concepts?filter=checklist&contextType=${encodeURIComponent(contextType)}&contextId=${encodeURIComponent(contextId)}`), { headers: buildHeaders() }).then(res => json<Checklist[]>(res));
+  return fetch(url(`/concepts?filter=checklist&contextType=${encodeURIComponent(contextType)}&contextId=${encodeURIComponent(contextId)}`), { headers: await buildHeaders() }).then(res => json<Checklist[]>(res));
 }
 
 export async function createChecklist(body: { name: string; items?: ChecklistItem[]; context?: { type: string; id: string } }) {
   return fetch(url('/concepts?filter=checklist'), {
     method: 'POST',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   }).then(res => json<{ id: string }>(res));
 }
@@ -125,7 +133,7 @@ export async function createChecklist(body: { name: string; items?: ChecklistIte
 export async function updateChecklist(id: string, body: { name?: string; items?: ChecklistItem[] }) {
   return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
     method: 'PATCH',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   }).then(res => json<{ ok: boolean }>(res));
 }
@@ -133,7 +141,7 @@ export async function updateChecklist(id: string, body: { name?: string; items?:
 export async function deleteChecklist(id: string) {
   return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
     method: 'DELETE',
-    headers: buildHeaders()
+    headers: await buildHeaders()
   }).then(res => json<{ ok: boolean }>(res));
 }
 
@@ -149,17 +157,17 @@ export type Note = {
 };
 
 export async function fetchNotes(): Promise<Note[]> {
-  return fetch(url('/concepts?filter=note'), { headers: buildHeaders() }).then(res => json<Note[]>(res));
+  return fetch(url('/concepts?filter=note'), { headers: await buildHeaders() }).then(res => json<Note[]>(res));
 }
 
 export async function fetchNotesByContext(contextType: string, contextId: string): Promise<Note[]> {
-  return fetch(url(`/concepts?filter=note&contextType=${encodeURIComponent(contextType)}&contextId=${encodeURIComponent(contextId)}`), { headers: buildHeaders() }).then(res => json<Note[]>(res));
+  return fetch(url(`/concepts?filter=note&contextType=${encodeURIComponent(contextType)}&contextId=${encodeURIComponent(contextId)}`), { headers: await buildHeaders() }).then(res => json<Note[]>(res));
 }
 
 export async function createNote(body: { text: string; context?: { type: string; id: string } }) {
   return fetch(url('/concepts?filter=note'), {
     method: 'POST',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   }).then(res => json<{ id: string }>(res));
 }
@@ -167,7 +175,7 @@ export async function createNote(body: { text: string; context?: { type: string;
 export async function updateNote(id: string, body: { text?: string }) {
   return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
     method: 'PATCH',
-    headers: buildHeaders({ 'Content-Type': 'application/json' }),
+    headers: await buildHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(body)
   }).then(res => json<{ ok: boolean }>(res));
 }
@@ -175,6 +183,6 @@ export async function updateNote(id: string, body: { text?: string }) {
 export async function deleteNote(id: string) {
   return fetch(url(`/concepts/${encodeURIComponent(id)}`), {
     method: 'DELETE',
-    headers: buildHeaders()
+    headers: await buildHeaders()
   }).then(res => json<{ ok: boolean }>(res));
 }

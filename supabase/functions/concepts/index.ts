@@ -12,6 +12,7 @@ interface Database {
           data: any;
           sub_modules: any[];
           permissions: any;
+          user_id: string;
           created_at: string;
           updated_at: string;
         };
@@ -21,6 +22,7 @@ interface Database {
           data: any;
           sub_modules?: any[];
           permissions?: any;
+          user_id: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -30,6 +32,7 @@ interface Database {
           data?: any;
           sub_modules?: any[];
           permissions?: any;
+          user_id?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -53,6 +56,15 @@ serve(async (req) => {
         },
       }
     );
+
+    // Get the authenticated user
+    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 401,
+      });
+    }
 
     const url = new URL(req.url);
     const filter = url.searchParams.get('filter');
@@ -219,6 +231,7 @@ serve(async (req) => {
         const insertData = {
           module_type: filter,
           data,
+          user_id: user.id,
         } as any;
 
         const { data: result, error } = await supabaseClient

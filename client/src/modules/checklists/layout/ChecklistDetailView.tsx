@@ -301,7 +301,7 @@ export function ChecklistDetailView({
 
   const handleFetchEmailsAsItems = async () => {
     if (!window.electron?.fetchUnreadEmails) {
-      onShowToast('Email functionality not available');
+      onShowToast('Email functionality is only available in the desktop app');
       return;
     }
 
